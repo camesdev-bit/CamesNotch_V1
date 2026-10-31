@@ -1,0 +1,2190 @@
+name: Build CamesNotch APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tulis file proyek
+        run: |
+          cat > 'settings.gradle.kts' <<'CAMES_EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "CamesNotch"
+          include(":app")
+          CAMES_EOF
+          cat > 'build.gradle.kts' <<'CAMES_EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          CAMES_EOF
+          cat > 'gradle.properties' <<'CAMES_EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          CAMES_EOF
+          cat > '.gitignore' <<'CAMES_EOF'
+          .gradle/
+          build/
+          local.properties
+          *.iml
+          .idea/
+          CAMES_EOF
+          mkdir -p 'app'
+          cat > 'app/build.gradle.kts' <<'CAMES_EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "id.cames.notch"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "id.cames.notch"
+                  minSdk = 26
+                  targetSdk = 33
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main'
+          cat > 'app/src/main/AndroidManifest.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".NotchAccessibilityService"
+                      android:exported="true"
+                      android:label="@string/app_name"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/a11y_config" />
+                  </service>
+
+                  <service
+                      android:name=".NotchListener"
+                      android:exported="true"
+                      android:label="@string/app_name"
+                      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+                      <intent-filter>
+                          <action android:name="android.service.notification.NotificationListenerService" />
+                      </intent-filter>
+                  </service>
+
+              </application>
+          </manifest>
+          CAMES_EOF
+          mkdir -p 'app/src/main/res/values'
+          cat > 'app/src/main/res/values/strings.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">CamesNotch</string>
+              <string name="a11y_desc">Menampilkan notch di atas layar supaya bisa diketuk, digeser, dan ditekan lama.</string>
+          </resources>
+          CAMES_EOF
+          mkdir -p 'app/src/main/res/xml'
+          cat > 'app/src/main/res/xml/a11y_config.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeWindowStateChanged"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:accessibilityFlags="flagDefault"
+              android:canRetrieveWindowContent="false"
+              android:description="@string/a11y_desc"
+              android:notificationTimeout="200" />
+          CAMES_EOF
+          mkdir -p 'app/src/main/res/drawable'
+          cat > 'app/src/main/res/drawable/ic_launcher.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#185FA5"
+                  android:pathData="M0,0h108v108h-108z" />
+              <path
+                  android:fillColor="#000000"
+                  android:pathData="M26,18 h56 v16 a16,16 0 0 1 -16,16 h-24 a16,16 0 0 1 -16,-16 z" />
+              <path
+                  android:fillColor="#5DCAA5"
+                  android:pathData="M54,70 m-6,0 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0" />
+          </vector>
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/MainActivity.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.Manifest
+          import android.app.Activity
+          import android.content.Intent
+          import android.content.pm.PackageManager
+          import android.graphics.Color
+          import android.os.Build
+          import android.os.Bundle
+          import android.provider.Settings
+          import android.view.View
+          import android.widget.Button
+          import android.widget.CheckBox
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import android.widget.SeekBar
+          import android.widget.Switch
+          import android.widget.TextView
+          import android.widget.Toast
+
+          class MainActivity : Activity() {
+
+              private var st1: TextView? = null
+              private var st2: TextView? = null
+              private var density = 1f
+
+              private fun dp(x: Int): Int = (x * density).toInt()
+
+              private fun label(text: String, size: Float, bold: Boolean, color: Int): TextView {
+                  val t = TextView(this)
+                  t.text = text
+                  t.textSize = size
+                  t.setTextColor(color)
+                  if (bold) t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
+                  t.setPadding(0, dp(6), 0, dp(2))
+                  return t
+              }
+
+              private fun button(text: String, onClick: () -> Unit): Button {
+                  val b = Button(this)
+                  b.text = text
+                  b.setOnClickListener { onClick() }
+                  return b
+              }
+
+              private fun slider(
+                  title: String, min: Int, max: Int, value: Int, onSet: (Int) -> Unit
+              ): View {
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+                  box.setPadding(0, dp(8), 0, 0)
+                  val t = TextView(this)
+                  t.text = title + ": " + value
+                  t.setTextColor(Color.parseColor("#222222"))
+                  val sb = SeekBar(this)
+                  sb.max = max - min
+                  sb.progress = value - min
+                  sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                          t.text = title + ": " + (p + min)
+                      }
+
+                      override fun onStartTrackingTouch(s: SeekBar?) {
+                      }
+
+                      override fun onStopTrackingTouch(s: SeekBar?) {
+                          val p = s?.progress ?: 0
+                          onSet(p + min)
+                      }
+                  })
+                  box.addView(t)
+                  box.addView(sb)
+                  return box
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  density = resources.displayMetrics.density
+
+                  val dark = Color.parseColor("#111111")
+                  val grey = Color.parseColor("#555555")
+
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setPadding(dp(20), dp(28), dp(20), dp(28))
+                  val sv = ScrollView(this)
+                  sv.addView(root)
+                  setContentView(sv)
+
+                  root.addView(label("CamesNotch", 28f, true, dark))
+                  root.addView(label("Notch ala iPhone untuk Android, tanpa iklan.", 14f, false, grey))
+
+                  root.addView(label("1. Akses notifikasi", 16f, true, dark))
+                  val s1 = label("", 14f, false, grey)
+                  st1 = s1
+                  root.addView(s1)
+                  root.addView(button("Buka pengaturan akses notifikasi") {
+                      startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                  })
+
+                  root.addView(label("2. Aksesibilitas", 16f, true, dark))
+                  val s2 = label("", 14f, false, grey)
+                  st2 = s2
+                  root.addView(s2)
+                  root.addView(button("Buka pengaturan aksesibilitas") {
+                      startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                  })
+
+                  root.addView(
+                      label(
+                          "Kalau pilihannya abu-abu (Android 13 ke atas): buka Info Aplikasi CamesNotch, " +
+                                  "ketuk titik tiga di kanan atas, pilih Izinkan setelan terbatas, lalu ulangi.",
+                          12f, false, grey
+                      )
+                  )
+
+                  root.addView(label("Pengaturan", 16f, true, dark))
+                  val sw = Switch(this)
+                  sw.text = "Notch aktif"
+                  sw.isChecked = Prefs.enabled(this)
+                  sw.setOnCheckedChangeListener { _, checked ->
+                      Prefs.setEnabled(this, checked)
+                      NotchController.rebuild()
+                  }
+                  root.addView(sw)
+
+                  root.addView(slider("Lebar notch (% layar)", 20, 45, Prefs.widthPct(this)) {
+                      Prefs.setWidthPct(this, it)
+                      NotchController.rebuild()
+                  })
+                  root.addView(slider("Tinggi tambahan (dp)", 0, 20, Prefs.extraDp(this)) {
+                      Prefs.setExtraDp(this, it)
+                      NotchController.rebuild()
+                  })
+                  root.addView(slider("Geser horizontal (dp)", -30, 30, Prefs.offsetDp(this)) {
+                      Prefs.setOffsetDp(this, it)
+                      NotchController.rebuild()
+                  })
+
+                  root.addView(label("Aplikasi yang tampil di notch", 16f, true, dark))
+                  val chosen = HashSet<String>(Prefs.apps(this))
+                  for (app in Prefs.APPS) {
+                      val cb = CheckBox(this)
+                      cb.text = app.first
+                      cb.isChecked = chosen.contains(app.second)
+                      cb.setOnCheckedChangeListener { _, checked ->
+                          if (checked) chosen.add(app.second) else chosen.remove(app.second)
+                          Prefs.setApps(this, chosen)
+                      }
+                      root.addView(cb)
+                  }
+
+                  root.addView(label("Coba", 16f, true, dark))
+                  root.addView(button("Tes notifikasi di notch") {
+                      if (NotchController.isReady()) {
+                          NotchController.demo()
+                      } else {
+                          Toast.makeText(this, "Aktifkan Aksesibilitas dulu.", Toast.LENGTH_SHORT).show()
+                      }
+                  })
+
+                  if (Build.VERSION.SDK_INT >= 31 &&
+                      checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+                  ) {
+                      requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
+                  }
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  val l = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: ""
+                  val a = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+                  st1?.text = if (l.contains(packageName)) "Aktif" else "Belum aktif"
+                  st2?.text = if (a.contains(packageName)) "Aktif" else "Belum aktif"
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/Model.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.graphics.Bitmap
+          import android.graphics.Color
+
+          enum class Kind {
+              IDLE, PILL, PANEL_NOTIF, PANEL_CALL, PANEL_MUSIC, PANEL_LIST, PANEL_NOTIFS, PANEL_QUICK
+          }
+
+          class Mini(
+              val type: Int,
+              val text: String = "",
+              val bmp: Bitmap? = null,
+              val color: Int = Color.WHITE
+          ) {
+              companion object {
+                  const val ART = 0
+                  const val BARS = 1
+                  const val BOLT = 2
+                  const val BT = 3
+                  const val ALARM = 4
+                  const val RING = 5
+                  const val TEXT = 6
+              }
+          }
+
+          class Row(
+              val title: String,
+              val sub: String,
+              val color: Int,
+              val bmp: Bitmap? = null,
+              val right: String = "",
+              val id: String = ""
+          )
+
+          class UiState(
+              val kind: Kind,
+              val left: Mini? = null,
+              val right: Mini? = null,
+              val dots: Int = 0,
+              val dotIdx: Int = 0,
+              val title: String = "",
+              val sub: String = "",
+              val time: String = "",
+              val color: Int = Color.GRAY,
+              val bmp: Bitmap? = null,
+              val progress: Float = 0f,
+              val posText: String = "",
+              val durText: String = "",
+              val playing: Boolean = false,
+              val rows: List<Row> = emptyList(),
+              val tiles: BooleanArray = BooleanArray(4),
+              val volume: Float = 0f
+          )
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/NotchAccessibilityService.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.accessibilityservice.AccessibilityService
+          import android.content.Intent
+          import android.content.res.Configuration
+          import android.view.accessibility.AccessibilityEvent
+
+          class NotchAccessibilityService : AccessibilityService() {
+
+              override fun onServiceConnected() {
+                  super.onServiceConnected()
+                  NotchController.attachA11y(this)
+              }
+
+              override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+              }
+
+              override fun onInterrupt() {
+              }
+
+              override fun onConfigurationChanged(newConfig: Configuration) {
+                  super.onConfigurationChanged(newConfig)
+                  NotchController.rebuild()
+              }
+
+              override fun onUnbind(intent: Intent?): Boolean {
+                  NotchController.detachA11y()
+                  return super.onUnbind(intent)
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/NotchController.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.accessibilityservice.AccessibilityService
+          import android.app.Notification
+          import android.app.PendingIntent
+          import android.bluetooth.BluetoothAdapter
+          import android.bluetooth.BluetoothDevice
+          import android.content.BroadcastReceiver
+          import android.content.ComponentName
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.PixelFormat
+          import android.hardware.camera2.CameraCharacteristics
+          import android.hardware.camera2.CameraManager
+          import android.media.AudioManager
+          import android.media.MediaMetadata
+          import android.media.session.MediaController
+          import android.media.session.MediaSessionManager
+          import android.media.session.PlaybackState
+          import android.net.wifi.WifiManager
+          import android.os.Build
+          import android.os.Handler
+          import android.os.Looper
+          import android.os.SystemClock
+          import android.provider.Settings
+          import android.service.notification.NotificationListenerService
+          import android.service.notification.StatusBarNotification
+          import android.view.Gravity
+          import android.view.HapticFeedbackConstants
+          import android.view.WindowManager
+          import java.util.Calendar
+          import kotlin.math.max
+          import kotlin.math.roundToInt
+
+          object NotchController : NotchView.Host {
+
+              private enum class Exp { NONE, MUSIC, ACTS, NOTIFS, QUICK }
+
+              private class CallInfo(
+                  val name: String,
+                  val answer: PendingIntent?,
+                  val decline: PendingIntent?,
+                  val open: PendingIntent?
+              )
+
+              private class Act(val type: Int, val left: Mini, val right: Mini, val row: Row)
+
+              private val ORANGE = Color.parseColor("#EF9F27")
+              private val TEAL = Color.parseColor("#5DCAA5")
+              private val CORAL = Color.parseColor("#D85A30")
+
+              private val h = Handler(Looper.getMainLooper())
+
+              private var a11y: AccessibilityService? = null
+              private var listener: NotificationListenerService? = null
+              private var wm: WindowManager? = null
+              private var view: NotchView? = null
+              private var lp: WindowManager.LayoutParams? = null
+              private var unit = 2f
+
+              private var mgr: MediaSessionManager? = null
+              private var sessions: List<MediaController> = emptyList()
+              private var media: MediaController? = null
+
+              private var timerEnd = 0L
+              private var alarmRinging = false
+              private var call: CallInfo? = null
+
+              private var trans: UiState? = null
+              private var transOpen: PendingIntent? = null
+              private var exp = Exp.NONE
+              private var shift = 0
+              private var notifList: List<StatusBarNotification> = emptyList()
+
+              private var torchId: String? = null
+              private var torchOn = false
+              private var torchRegistered = false
+
+              // ------------------------------------------------------------ lifecycle
+
+              fun attachA11y(s: AccessibilityService) {
+                  a11y = s
+                  wm = s.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                  val f = IntentFilter()
+                  f.addAction(Intent.ACTION_POWER_CONNECTED)
+                  f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+                  try {
+                      s.registerReceiver(receiver, f)
+                  } catch (e: Exception) {
+                  }
+                  initTorch(s)
+                  rebuild()
+              }
+
+              fun detachA11y() {
+                  val s = a11y
+                  removeView()
+                  if (s != null) {
+                      try {
+                          s.unregisterReceiver(receiver)
+                      } catch (e: Exception) {
+                      }
+                      try {
+                          if (torchRegistered) {
+                              val cm = s.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                              cm.unregisterTorchCallback(torchCb)
+                              torchRegistered = false
+                          }
+                      } catch (e: Exception) {
+                      }
+                  }
+                  a11y = null
+              }
+
+              fun attachListener(s: NotificationListenerService) {
+                  listener = s
+                  mgr = s.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+                  val cn = ComponentName(s, NotchListener::class.java)
+                  try {
+                      mgr?.addOnActiveSessionsChangedListener(sessionsListener, cn)
+                  } catch (e: Exception) {
+                  }
+                  updateSessions()
+                  scanNotifs()
+                  render()
+              }
+
+              fun detachListener() {
+                  for (c in sessions) {
+                      try {
+                          c.unregisterCallback(mediaCb)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  try {
+                      mgr?.removeOnActiveSessionsChangedListener(sessionsListener)
+                  } catch (e: Exception) {
+                  }
+                  sessions = emptyList()
+                  media = null
+                  listener = null
+                  render()
+              }
+
+              fun isReady(): Boolean = view != null
+
+              fun demo() {
+                  showTransient(
+                      UiState(
+                          Kind.PANEL_NOTIF,
+                          title = "Budi",
+                          sub = "Bro, jadi bikin appnya?",
+                          time = "sekarang",
+                          color = Color.parseColor("#1D9E75")
+                      ), 5000L, null
+                  )
+              }
+
+              fun rebuild() {
+                  val s = a11y ?: return
+                  removeView()
+                  if (!Prefs.enabled(s)) return
+                  val dm = s.resources.displayMetrics
+                  if (dm.widthPixels > dm.heightPixels) return
+                  val u = dm.widthPixels / 360f
+                  unit = u
+
+                  var sb = 30f * u
+                  val sbId = s.resources.getIdentifier("status_bar_height", "dimen", "android")
+                  if (sbId > 0) sb = s.resources.getDimensionPixelSize(sbId).toFloat()
+
+                  var cutB = 0f
+                  var cutW = 0f
+                  if (Build.VERSION.SDK_INT >= 30) {
+                      try {
+                          val cut = wm?.currentWindowMetrics?.windowInsets?.displayCutout
+                          val r = cut?.boundingRectTop
+                          if (r != null && !r.isEmpty) {
+                              cutB = r.bottom.toFloat()
+                              cutW = r.width().toFloat()
+                          }
+                      } catch (e: Exception) {
+                      }
+                  }
+
+                  val extra = Prefs.extraDp(s) * dm.density
+                  var nw = Prefs.widthPct(s) / 100f * 360f * u
+                  if (cutW > 0f) nw = max(nw, cutW + 24f * u)
+                  var nh = if (cutB > 0f) cutB + 2f * u else 26f * u
+                  nh = max(nh, 22f * u) + extra
+                  val pw = 324f * u
+
+                  val v = NotchView(s, this)
+                  v.configure(u, nw, nh, sb, pw)
+
+                  val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                          WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                          WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                          WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                          WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                  val l = WindowManager.LayoutParams(
+                      nw.toInt(),
+                      nh.toInt(),
+                      WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                      flags,
+                      PixelFormat.TRANSLUCENT
+                  )
+                  l.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                  l.x = (Prefs.offsetDp(s) * dm.density).toInt()
+                  l.y = 0
+                  if (Build.VERSION.SDK_INT >= 28) {
+                      l.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                  }
+                  try {
+                      wm?.addView(v, l)
+                  } catch (e: Exception) {
+                      return
+                  }
+                  view = v
+                  lp = l
+                  render()
+              }
+
+              private fun removeView() {
+                  h.removeCallbacks(tickRun)
+                  h.removeCallbacks(collapseRun)
+                  h.removeCallbacks(clearTransRun)
+                  val v = view
+                  if (v != null) {
+                      try {
+                          wm?.removeView(v)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  view = null
+                  lp = null
+              }
+
+              fun onConfig() {
+                  rebuild()
+              }
+
+              // --------------------------------------------------------------- window
+
+              private fun growWindow(v: NotchView) {
+                  val l = lp ?: return
+                  val slack = (14f * unit).toInt()
+                  l.width = max(l.width, v.targetW() + slack)
+                  l.height = max(l.height, v.targetH() + slack)
+                  l.flags = l.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                  try {
+                      wm?.updateViewLayout(v, l)
+                  } catch (e: Exception) {
+                  }
+              }
+
+              override fun onSettled() {
+                  val v = view ?: return
+                  val l = lp ?: return
+                  l.width = v.targetW()
+                  l.height = v.targetH()
+                  l.flags = l.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                  try {
+                      wm?.updateViewLayout(v, l)
+                  } catch (e: Exception) {
+                  }
+              }
+
+              private fun render() {
+                  val v = view ?: return
+                  val st = buildState()
+                  if (v.setState(st)) growWindow(v)
+                  scheduleTicks()
+              }
+
+              private val tickRun = Runnable { render() }
+
+              private fun scheduleTicks() {
+                  h.removeCallbacks(tickRun)
+                  val music = exp == Exp.MUSIC && media?.playbackState?.state == PlaybackState.STATE_PLAYING
+                  val timer = timerRemaining() > 0
+                  if (music) {
+                      h.postDelayed(tickRun, 500L)
+                  } else if (timer) {
+                      h.postDelayed(tickRun, 1000L)
+                  }
+              }
+
+              // ---------------------------------------------------------------- state
+
+              private fun buildState(): UiState {
+                  when (exp) {
+                      Exp.MUSIC -> return musicPanel()
+                      Exp.ACTS -> return UiState(Kind.PANEL_LIST, rows = acts().map { it.row })
+                      Exp.NOTIFS -> return UiState(Kind.PANEL_NOTIFS, rows = notifRowsNow())
+                      Exp.QUICK -> return quickPanel()
+                      else -> {
+                      }
+                  }
+                  val t = trans
+                  if (t != null) return t
+                  val ci = call
+                  if (ci != null) return UiState(Kind.PANEL_CALL, title = ci.name)
+                  if (alarmRinging) {
+                      return UiState(
+                          Kind.PILL,
+                          left = Mini(Mini.ALARM, color = ORANGE),
+                          right = Mini(Mini.TEXT, nowText(), color = ORANGE)
+                      )
+                  }
+                  val a = acts()
+                  if (a.size >= 2) {
+                      return UiState(
+                          Kind.PILL,
+                          left = a[0].left,
+                          right = a[1].right,
+                          dots = a.size,
+                          dotIdx = Math.floorMod(shift, a.size)
+                      )
+                  }
+                  if (a.size == 1) return UiState(Kind.PILL, left = a[0].left, right = a[0].right)
+                  return UiState(Kind.IDLE)
+              }
+
+              private fun acts(): List<Act> {
+                  val list = ArrayList<Act>()
+                  val m = media
+                  if (m != null && m.playbackState?.state == PlaybackState.STATE_PLAYING) {
+                      val md = m.metadata
+                      val bmp = if (md != null) art(md) else null
+                      val title = md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Musik"
+                      val artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
+                      list.add(
+                          Act(
+                              0,
+                              Mini(Mini.ART, bmp = bmp, color = CORAL),
+                              Mini(Mini.BARS),
+                              Row(title, artist, CORAL, bmp, "", "music")
+                          )
+                      )
+                  }
+                  val rem = timerRemaining()
+                  if (rem > 0) {
+                      val t = fmtSec(rem)
+                      list.add(
+                          Act(
+                              1,
+                              Mini(Mini.RING, color = ORANGE),
+                              Mini(Mini.TEXT, t, color = ORANGE),
+                              Row("Timer", "Hitung mundur", ORANGE, null, t, "timer")
+                          )
+                      )
+                  }
+                  if (list.size >= 2) {
+                      val k = Math.floorMod(shift, list.size)
+                      if (k > 0) {
+                          val rotated = ArrayList<Act>()
+                          rotated.addAll(list.subList(k, list.size))
+                          rotated.addAll(list.subList(0, k))
+                          return rotated
+                      }
+                  }
+                  return list
+              }
+
+              private fun art(md: MediaMetadata): Bitmap? {
+                  return md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                      ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                      ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+              }
+
+              private fun musicPanel(): UiState {
+                  val m = media
+                  val md = m?.metadata
+                  val ps = m?.playbackState
+                  val dur = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+                  val playing = ps?.state == PlaybackState.STATE_PLAYING
+                  var pos = ps?.position ?: 0L
+                  if (pos < 0L) pos = 0L
+                  if (ps != null && playing) {
+                      pos += ((SystemClock.elapsedRealtime() - ps.lastPositionUpdateTime) * ps.playbackSpeed).toLong()
+                  }
+                  if (dur > 0L && pos > dur) pos = dur
+                  val title = md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Musik"
+                  val artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
+                  val bmp = if (md != null) art(md) else null
+                  return UiState(
+                      Kind.PANEL_MUSIC,
+                      title = title,
+                      sub = artist,
+                      color = CORAL,
+                      bmp = bmp,
+                      progress = if (dur > 0L) pos.toFloat() / dur.toFloat() else 0f,
+                      posText = fmtMs(pos),
+                      durText = if (dur > 0L) fmtMs(dur) else "--:--",
+                      playing = playing
+                  )
+              }
+
+              private fun quickPanel(): UiState {
+                  val c = a11y ?: return UiState(Kind.IDLE)
+                  val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                  val mx = max(1, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+                  val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / mx.toFloat()
+                  var wifi = false
+                  try {
+                      val wmgr = c.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                      wifi = wmgr.isWifiEnabled
+                  } catch (e: Exception) {
+                  }
+                  var data = false
+                  try {
+                      data = Settings.Global.getInt(c.contentResolver, "mobile_data", 1) == 1
+                  } catch (e: Exception) {
+                  }
+                  var bt = false
+                  try {
+                      val ad = BluetoothAdapter.getDefaultAdapter()
+                      bt = ad != null && ad.isEnabled
+                  } catch (e: Exception) {
+                  }
+                  return UiState(Kind.PANEL_QUICK, tiles = booleanArrayOf(wifi, data, torchOn, bt), volume = vol)
+              }
+
+              private fun notifRowsNow(): List<Row> {
+                  val l = listener ?: return emptyList()
+                  val ctx = a11y ?: return emptyList()
+                  val apps = Prefs.apps(ctx)
+                  val all = try {
+                      l.activeNotifications
+                  } catch (e: Exception) {
+                      null
+                  }
+                  if (all == null) return emptyList()
+                  val f = all
+                      .filter { apps.contains(it.packageName) && (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 }
+                      .sortedByDescending { it.postTime }
+                      .take(4)
+                  notifList = f
+                  val rows = ArrayList<Row>()
+                  for (i in f.indices) {
+                      rows.add(rowOf(f[i], "n:" + i))
+                  }
+                  return rows
+              }
+
+              private fun rowOf(sbn: StatusBarNotification, id: String): Row {
+                  val ex = sbn.notification.extras
+                  val t = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+                  val x = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                  return Row(t, x, colorFor(sbn.packageName), iconOf(sbn), "", id)
+              }
+
+              private fun colorFor(pkg: String): Int {
+                  return when {
+                      pkg.startsWith("com.whatsapp") -> Color.parseColor("#1D9E75")
+                      pkg.contains("telegram") -> Color.parseColor("#378ADD")
+                      pkg.contains("instagram") -> Color.parseColor("#D4537E")
+                      else -> Color.parseColor("#7F77DD")
+                  }
+              }
+
+              private fun iconOf(sbn: StatusBarNotification): Bitmap? {
+                  val ctx = a11y ?: return null
+                  try {
+                      val ic = sbn.notification.getLargeIcon() ?: return null
+                      val d = ic.loadDrawable(ctx) ?: return null
+                      val b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                      val cv = Canvas(b)
+                      d.setBounds(0, 0, 96, 96)
+                      d.draw(cv)
+                      return b
+                  } catch (e: Exception) {
+                      return null
+                  }
+              }
+
+              // ----------------------------------------------------------- formatting
+
+              private fun timerRemaining(): Long {
+                  if (timerEnd <= 0L) return 0L
+                  val r = (timerEnd - System.currentTimeMillis()) / 1000L
+                  return if (r > 0L) r else 0L
+              }
+
+              private fun fmtSec(s: Long): String {
+                  val hh = s / 3600L
+                  val mm = (s % 3600L) / 60L
+                  val ss = s % 60L
+                  return if (hh > 0L) String.format("%d.%02d.%02d", hh, mm, ss) else String.format("%02d.%02d", mm, ss)
+              }
+
+              private fun fmtMs(ms: Long): String {
+                  val t = ms / 1000L
+                  return String.format("%d:%02d", t / 60L, t % 60L)
+              }
+
+              private fun nowText(): String {
+                  val c = Calendar.getInstance()
+                  return String.format("%02d.%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
+              }
+
+              // --------------------------------------------------------- notifications
+
+              fun onPosted(sbn: StatusBarNotification) {
+                  scanNotifs()
+                  val ctx = a11y
+                  if (ctx != null) {
+                      val n = sbn.notification
+                      val isGroup = (n.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+                      if (Prefs.apps(ctx).contains(sbn.packageName) && !isGroup && !sbn.isOngoing &&
+                          n.category != Notification.CATEGORY_CALL
+                      ) {
+                          val row = rowOf(sbn, "notif")
+                          if (row.title.isNotEmpty() || row.sub.isNotEmpty()) {
+                              showTransient(
+                                  UiState(
+                                      Kind.PANEL_NOTIF,
+                                      title = row.title,
+                                      sub = row.sub,
+                                      time = "sekarang",
+                                      color = row.color,
+                                      bmp = row.bmp
+                                  ), 5000L, n.contentIntent
+                              )
+                              return
+                          }
+                      }
+                  }
+                  render()
+              }
+
+              fun onRemoved(sbn: StatusBarNotification) {
+                  scanNotifs()
+                  render()
+              }
+
+              private fun isClock(p: String): Boolean {
+                  val s = p.lowercase()
+                  return s.contains("deskclock") || s.contains("clock") || s.contains("alarm")
+              }
+
+              private fun scanNotifs() {
+                  val l = listener ?: return
+                  val all = try {
+                      l.activeNotifications
+                  } catch (e: Exception) {
+                      null
+                  }
+                  if (all == null) return
+                  var tEnd = 0L
+                  var ring = false
+                  var ci: CallInfo? = null
+                  for (sbn in all) {
+                      val n = sbn.notification
+                      val cat = n.category
+                      if (cat == Notification.CATEGORY_CALL) {
+                          val c = parseCall(sbn)
+                          if (c != null) ci = c
+                      } else if (isClock(sbn.packageName) || cat == Notification.CATEGORY_ALARM) {
+                          val ex = n.extras
+                          if (n.fullScreenIntent != null) {
+                              ring = true
+                          } else if (ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) &&
+                              ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
+                          ) {
+                              tEnd = n.`when`
+                          }
+                      }
+                  }
+                  timerEnd = tEnd
+                  alarmRinging = ring
+                  call = ci
+              }
+
+              private fun parseCall(sbn: StatusBarNotification): CallInfo? {
+                  val n = sbn.notification
+                  val answerWords = listOf("angkat", "jawab", "answer", "accept", "terima")
+                  val declineWords = listOf("tolak", "decline", "reject", "abaikan", "dismiss")
+                  var ans: PendingIntent? = null
+                  var dec: PendingIntent? = null
+                  val actions = n.actions
+                  if (actions != null) {
+                      for (a in actions) {
+                          val t = (a.title?.toString() ?: "").lowercase()
+                          if (answerWords.any { t.contains(it) }) {
+                              ans = a.actionIntent
+                          } else if (declineWords.any { t.contains(it) }) {
+                              dec = a.actionIntent
+                          }
+                      }
+                  }
+                  val incoming = ans != null || n.fullScreenIntent != null
+                  if (!incoming) return null
+                  val name = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "Panggilan masuk"
+                  val open = n.contentIntent ?: n.fullScreenIntent
+                  return CallInfo(name, ans, dec, open)
+              }
+
+              // ------------------------------------------------------------ transient
+
+              private val clearTransRun = Runnable {
+                  trans = null
+                  transOpen = null
+                  render()
+              }
+
+              private fun showTransient(st: UiState, ms: Long, open: PendingIntent?) {
+                  if (exp != Exp.NONE) {
+                      render()
+                      return
+                  }
+                  trans = st
+                  transOpen = open
+                  h.removeCallbacks(clearTransRun)
+                  h.postDelayed(clearTransRun, ms)
+                  render()
+              }
+
+              private val receiver = object : BroadcastReceiver() {
+                  override fun onReceive(c: Context, i: Intent) {
+                      val act = i.action
+                      if (act == Intent.ACTION_POWER_CONNECTED) {
+                          val b = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                          var pct = 0
+                          if (b != null) {
+                              val lv = b.getIntExtra("level", 0)
+                              val sc = b.getIntExtra("scale", 100)
+                              pct = lv * 100 / max(1, sc)
+                          }
+                          showTransient(
+                              UiState(
+                                  Kind.PILL,
+                                  left = Mini(Mini.BOLT),
+                                  right = Mini(Mini.TEXT, pct.toString() + "%", color = TEAL)
+                              ), 3500L, null
+                          )
+                      } else if (act == BluetoothDevice.ACTION_ACL_CONNECTED) {
+                          var name = "Bluetooth"
+                          try {
+                              val d = i.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                              val n = d?.name
+                              if (n != null) name = n
+                          } catch (e: Exception) {
+                          }
+                          showTransient(
+                              UiState(
+                                  Kind.PILL,
+                                  left = Mini(Mini.BT),
+                                  right = Mini(Mini.TEXT, name, color = Color.WHITE)
+                              ), 4000L, null
+                          )
+                      }
+                  }
+              }
+
+              // ---------------------------------------------------------------- media
+
+              private val mediaCb = object : MediaController.Callback() {
+                  override fun onPlaybackStateChanged(state: PlaybackState?) {
+                      pickMedia()
+                      render()
+                  }
+
+                  override fun onMetadataChanged(metadata: MediaMetadata?) {
+                      render()
+                  }
+
+                  override fun onSessionDestroyed() {
+                      updateSessions()
+                  }
+              }
+
+              private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { list ->
+                  for (c in sessions) {
+                      try {
+                          c.unregisterCallback(mediaCb)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  sessions = list ?: emptyList()
+                  for (c in sessions) {
+                      try {
+                          c.registerCallback(mediaCb, h)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  pickMedia()
+                  render()
+              }
+
+              private fun updateSessions() {
+                  val m = mgr ?: return
+                  val l = listener ?: return
+                  val cn = ComponentName(l, NotchListener::class.java)
+                  val list = try {
+                      m.getActiveSessions(cn)
+                  } catch (e: Exception) {
+                      emptyList<MediaController>()
+                  }
+                  for (c in sessions) {
+                      try {
+                          c.unregisterCallback(mediaCb)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  sessions = list
+                  for (c in sessions) {
+                      try {
+                          c.registerCallback(mediaCb, h)
+                      } catch (e: Exception) {
+                      }
+                  }
+                  pickMedia()
+                  render()
+              }
+
+              private fun pickMedia() {
+                  val playing = sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+                  if (playing != null) {
+                      media = playing
+                      return
+                  }
+                  val old = media
+                  if (old != null && sessions.any { it.sessionToken == old.sessionToken }) return
+                  media = sessions.firstOrNull()
+              }
+
+              // ---------------------------------------------------------------- torch
+
+              private val torchCb = object : CameraManager.TorchCallback() {
+                  override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+                      if (cameraId == torchId) {
+                          torchOn = enabled
+                          if (exp == Exp.QUICK) render()
+                      }
+                  }
+              }
+
+              private fun initTorch(c: Context) {
+                  try {
+                      val cm = c.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                      for (id in cm.cameraIdList) {
+                          val ch = cm.getCameraCharacteristics(id)
+                          val flash = ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+                          val back = ch.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+                          if (flash && back) {
+                              torchId = id
+                              break
+                          }
+                      }
+                      if (!torchRegistered) {
+                          cm.registerTorchCallback(torchCb, h)
+                          torchRegistered = true
+                      }
+                  } catch (e: Exception) {
+                  }
+              }
+
+              private fun toggleTorch() {
+                  val c = a11y ?: return
+                  val id = torchId ?: return
+                  try {
+                      val cm = c.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                      cm.setTorchMode(id, !torchOn)
+                  } catch (e: Exception) {
+                  }
+              }
+
+              // -------------------------------------------------------------- gestures
+
+              private val collapseRun = Runnable {
+                  exp = Exp.NONE
+                  render()
+              }
+
+              private fun setExp(e: Exp) {
+                  exp = e
+                  h.removeCallbacks(collapseRun)
+                  if (e != Exp.NONE) h.postDelayed(collapseRun, 8000L)
+                  view?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                  render()
+              }
+
+              override fun onActive() {
+                  if (exp != Exp.NONE) {
+                      h.removeCallbacks(collapseRun)
+                      h.postDelayed(collapseRun, 8000L)
+                  }
+              }
+
+              override fun onTapEmpty() {
+                  if (exp != Exp.NONE) return
+                  if (trans != null || call != null || alarmRinging) return
+                  val a = acts()
+                  if (a.size >= 2) {
+                      setExp(Exp.ACTS)
+                  } else if (a.size == 1 && a[0].type == 0) {
+                      setExp(Exp.MUSIC)
+                  }
+              }
+
+              override fun onLongPress(left: Boolean) {
+                  if (exp != Exp.NONE) return
+                  setExp(if (left) Exp.NOTIFS else Exp.QUICK)
+              }
+
+              override fun onSwipe(dir: Int) {
+                  if (exp != Exp.NONE) return
+                  if (acts().size >= 2) {
+                      shift += dir
+                      view?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                      render()
+                  }
+              }
+
+              override fun onClose() {
+                  exp = Exp.NONE
+                  trans = null
+                  transOpen = null
+                  h.removeCallbacks(collapseRun)
+                  h.removeCallbacks(clearTransRun)
+                  render()
+              }
+
+              private fun send(pi: PendingIntent?) {
+                  try {
+                      pi?.send()
+                  } catch (e: Exception) {
+                  }
+              }
+
+              private fun launch(action: String) {
+                  val c = a11y ?: return
+                  try {
+                      val i = Intent(action)
+                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                      c.startActivity(i)
+                  } catch (e: Exception) {
+                  }
+              }
+
+              override fun onAction(id: String, frac: Float) {
+                  val m = media
+                  if (id == "prev") {
+                      m?.transportControls?.skipToPrevious()
+                  } else if (id == "next") {
+                      m?.transportControls?.skipToNext()
+                  } else if (id == "toggle") {
+                      val tc = m?.transportControls
+                      if (m?.playbackState?.state == PlaybackState.STATE_PLAYING) tc?.pause() else tc?.play()
+                  } else if (id == "seek") {
+                      val dur = m?.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+                      if (dur > 0L) m?.transportControls?.seekTo((dur * frac).toLong())
+                  } else if (id == "answer") {
+                      send(call?.answer ?: call?.open)
+                  } else if (id == "decline") {
+                      send(call?.decline)
+                  } else if (id == "notif") {
+                      send(transOpen)
+                      onClose()
+                      return
+                  } else if (id == "music") {
+                      setExp(Exp.MUSIC)
+                      return
+                  } else if (id.startsWith("n:")) {
+                      val idx = id.substring(2).toIntOrNull() ?: -1
+                      if (idx >= 0 && idx < notifList.size) send(notifList[idx].notification.contentIntent)
+                      onClose()
+                      return
+                  } else if (id == "wifi") {
+                      launch(if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS)
+                      onClose()
+                      return
+                  } else if (id == "data") {
+                      launch(
+                          if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_INTERNET_CONNECTIVITY
+                          else Settings.ACTION_DATA_ROAMING_SETTINGS
+                      )
+                      onClose()
+                      return
+                  } else if (id == "bt") {
+                      launch(Settings.ACTION_BLUETOOTH_SETTINGS)
+                      onClose()
+                      return
+                  } else if (id == "torch") {
+                      toggleTorch()
+                  } else if (id == "vol") {
+                      val c = a11y
+                      if (c != null) {
+                          val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                          val mx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                          am.setStreamVolume(AudioManager.STREAM_MUSIC, (frac * mx).roundToInt(), 0)
+                      }
+                  }
+                  render()
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/NotchListener.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.content.ComponentName
+          import android.service.notification.NotificationListenerService
+          import android.service.notification.StatusBarNotification
+
+          class NotchListener : NotificationListenerService() {
+
+              override fun onListenerConnected() {
+                  super.onListenerConnected()
+                  NotchController.attachListener(this)
+              }
+
+              override fun onListenerDisconnected() {
+                  NotchController.detachListener()
+                  try {
+                      requestRebind(ComponentName(this, NotchListener::class.java))
+                  } catch (e: Exception) {
+                  }
+                  super.onListenerDisconnected()
+              }
+
+              override fun onNotificationPosted(sbn: StatusBarNotification) {
+                  NotchController.onPosted(sbn)
+              }
+
+              override fun onNotificationRemoved(sbn: StatusBarNotification) {
+                  NotchController.onRemoved(sbn)
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/NotchView.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.content.Context
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Paint
+          import android.graphics.Path
+          import android.graphics.Rect
+          import android.graphics.RectF
+          import android.graphics.Typeface
+          import android.text.TextPaint
+          import android.text.TextUtils
+          import android.view.HapticFeedbackConstants
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.ViewConfiguration
+          import kotlin.math.abs
+          import kotlin.math.ceil
+          import kotlin.math.max
+          import kotlin.math.min
+          import kotlin.math.sin
+
+          private val C_GRAY = Color.parseColor("#B4B2A9")
+          private val C_DARK = Color.parseColor("#2C2C2A")
+          private val C_TRACK = Color.parseColor("#444441")
+          private val C_BLUE = Color.parseColor("#378ADD")
+          private val C_ORANGE = Color.parseColor("#EF9F27")
+          private val C_GREEN = Color.parseColor("#1D9E75")
+          private val C_RED = Color.parseColor("#E24B4A")
+          private val C_TEAL = Color.parseColor("#5DCAA5")
+          private val C_SKY = Color.parseColor("#85B7EB")
+
+          class NotchView(ctx: Context, private val host: Host) : View(ctx) {
+
+              interface Host {
+                  fun onAction(id: String, frac: Float)
+                  fun onTapEmpty()
+                  fun onLongPress(left: Boolean)
+                  fun onSwipe(dir: Int)
+                  fun onClose()
+                  fun onActive()
+                  fun onSettled()
+              }
+
+              private class Hit(val id: String, val r: RectF, val tl: Float = 0f, val tw: Float = 0f)
+
+              private var u = 2f
+              private var collapsedW = 236f
+              private var collapsedH = 52f
+              private var statusH = 60f
+              private var panelW = 648f
+
+              private var state: UiState? = null
+              private val cur = FloatArray(3)
+              private val vel = FloatArray(3)
+              private val tgt = FloatArray(3)
+              private var modeKey = -1
+              private var contentAlpha = 1f
+              private var contentDelay = 0f
+              private var running = false
+              private var lastNs = 0L
+              private var barsRunning = false
+
+              private val hits = ArrayList<Hit>()
+              private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+
+              private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val stroke = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val tp = TextPaint(Paint.ANTI_ALIAS_FLAG)
+              private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+              private val path = Path()
+              private val rect = RectF()
+              private val src = Rect()
+
+              private var downX = 0f
+              private var downY = 0f
+              private var moved = false
+              private var longFired = false
+              private var downHit: Hit? = null
+
+              private val springK = 300f
+              private val springC = 24f
+
+              init {
+                  stroke.style = Paint.Style.STROKE
+                  stroke.strokeCap = Paint.Cap.ROUND
+                  stroke.strokeJoin = Paint.Join.ROUND
+              }
+
+              fun configure(unit: Float, nw: Float, nh: Float, sb: Float, pw: Float) {
+                  u = unit
+                  collapsedW = nw
+                  collapsedH = nh
+                  statusH = sb
+                  panelW = pw
+                  val s = state
+                  if (s != null) {
+                      targetsFor(s)
+                      for (i in 0..2) {
+                          cur[i] = tgt[i]
+                          vel[i] = 0f
+                      }
+                      invalidate()
+                  }
+              }
+
+              private fun isPanel(s: UiState): Boolean = s.kind != Kind.IDLE && s.kind != Kind.PILL
+
+              private fun panelH(s: UiState): Float = when (s.kind) {
+                  Kind.PANEL_NOTIF -> 58f * u
+                  Kind.PANEL_CALL -> 96f * u
+                  Kind.PANEL_MUSIC -> 124f * u
+                  Kind.PANEL_LIST, Kind.PANEL_NOTIFS -> (24f + 36f * max(1, s.rows.size)) * u
+                  Kind.PANEL_QUICK -> 134f * u
+                  else -> 0f
+              }
+
+              private fun targetsFor(s: UiState) {
+                  if (isPanel(s)) {
+                      tgt[0] = collapsedW
+                      tgt[1] = statusH + 14f * u
+                      tgt[2] = panelH(s)
+                  } else {
+                      tgt[0] = if (s.kind == Kind.PILL) collapsedW + 10f * u else collapsedW
+                      tgt[1] = collapsedH
+                      tgt[2] = 0f
+                  }
+              }
+
+              fun targetW(): Int {
+                  val s = state ?: return ceil(collapsedW).toInt()
+                  return ceil(if (isPanel(s)) panelW else tgt[0]).toInt()
+              }
+
+              fun targetH(): Int {
+                  val s = state ?: return ceil(collapsedH).toInt()
+                  if (isPanel(s)) return ceil(statusH + tgt[2]).toInt()
+                  val dots = if (s.dots > 1) 16f * u else 0f
+                  return ceil(tgt[1] + dots).toInt()
+              }
+
+              private fun keyOf(s: UiState): Int {
+                  return s.kind.ordinal * 10000 + (s.left?.type ?: 9) * 100 + (s.right?.type ?: 9) * 10 + min(s.rows.size, 9)
+              }
+
+              private fun needsAnim(s: UiState): Boolean {
+                  return s.left?.type == Mini.BARS || s.right?.type == Mini.BARS || s.left?.type == Mini.ALARM
+              }
+
+              fun setState(s: UiState): Boolean {
+                  val first = state == null
+                  val oldW = targetW()
+                  val oldH = targetH()
+                  state = s
+                  targetsFor(s)
+                  if (first) {
+                      for (i in 0..2) {
+                          cur[i] = tgt[i]
+                          vel[i] = 0f
+                      }
+                  }
+                  val k = keyOf(s)
+                  if (k != modeKey) {
+                      modeKey = k
+                      if (!first) {
+                          contentAlpha = 0f
+                          contentDelay = 0.12f
+                      }
+                  }
+                  startLoop()
+                  startBars()
+                  invalidate()
+                  return first || oldW != targetW() || oldH != targetH()
+              }
+
+              private fun startLoop() {
+                  if (!running) {
+                      running = true
+                      lastNs = System.nanoTime()
+                      postOnAnimation(tick)
+                  }
+              }
+
+              private val tick = object : Runnable {
+                  override fun run() {
+                      val now = System.nanoTime()
+                      var dt = (now - lastNs) / 1_000_000_000f
+                      lastNs = now
+                      if (dt > 0.033f) dt = 0.033f
+                      var moving = false
+                      val sub = 2
+                      val step = dt / sub
+                      for (i in 0..2) {
+                          for (n in 0 until sub) {
+                              val a = springK * (tgt[i] - cur[i]) - springC * vel[i]
+                              vel[i] += a * step
+                              cur[i] += vel[i] * step
+                          }
+                          if (abs(vel[i]) > 1f || abs(tgt[i] - cur[i]) > 0.4f) {
+                              moving = true
+                          } else {
+                              cur[i] = tgt[i]
+                              vel[i] = 0f
+                          }
+                      }
+                      if (contentDelay > 0f) {
+                          contentDelay -= dt
+                          moving = true
+                      } else if (contentAlpha < 1f) {
+                          contentAlpha = min(1f, contentAlpha + dt / 0.22f)
+                          moving = true
+                      }
+                      invalidate()
+                      if (moving) {
+                          postOnAnimation(this)
+                      } else {
+                          running = false
+                          host.onSettled()
+                      }
+                  }
+              }
+
+              private val barsRun = object : Runnable {
+                  override fun run() {
+                      val s = state
+                      if (s != null && needsAnim(s) && isAttachedToWindow) {
+                          invalidate()
+                          postDelayed(this, 50L)
+                      } else {
+                          barsRunning = false
+                      }
+                  }
+              }
+
+              private fun startBars() {
+                  val s = state ?: return
+                  if (needsAnim(s) && !barsRunning) {
+                      barsRunning = true
+                      postDelayed(barsRun, 50L)
+                  }
+              }
+
+              override fun onDetachedFromWindow() {
+                  removeCallbacks(tick)
+                  removeCallbacks(barsRun)
+                  removeCallbacks(longRun)
+                  running = false
+                  barsRunning = false
+                  super.onDetachedFromWindow()
+              }
+
+              // ---------------------------------------------------------------- drawing
+
+              override fun onDraw(c: Canvas) {
+                  val s = state ?: return
+                  hits.clear()
+                  val cx = width / 2f
+                  val nw = max(0f, cur[0])
+                  val nh = max(0f, cur[1])
+                  val ph = max(0f, cur[2])
+                  val py = statusH
+
+                  val outer = c.save()
+                  if (s.left?.type == Mini.ALARM) {
+                      val t = System.currentTimeMillis() / 1000f
+                      c.translate(sin(t * 38f) * 1.4f * u, 0f)
+                  }
+
+                  fill.color = Color.BLACK
+                  val nl = cx - nw / 2f
+                  val nr = cx + nw / 2f
+                  val r = min(nh / 2f, 14f * u)
+                  rect.set(nl, -nh, nr, nh)
+                  c.drawRoundRect(rect, r, r, fill)
+
+                  if (ph > 1f) {
+                      val pl = cx - panelW / 2f
+                      val pr = cx + panelW / 2f
+                      val rp = min(22f * u, ph / 2f)
+                      rect.set(pl, py, pr, py + ph)
+                      c.drawRoundRect(rect, rp, rp, fill)
+
+                      val f = min(20f * u, ph / 2.2f)
+                      if (f > 1f) {
+                          path.reset()
+                          path.moveTo(nl - f, py)
+                          path.lineTo(nl, py)
+                          path.lineTo(nl, py - f)
+                          rect.set(nl - 2f * f, py - 2f * f, nl, py)
+                          path.arcTo(rect, 0f, 90f)
+                          path.close()
+                          c.drawPath(path, fill)
+
+                          path.reset()
+                          path.moveTo(nr + f, py)
+                          path.lineTo(nr, py)
+                          path.lineTo(nr, py - f)
+                          rect.set(nr, py - 2f * f, nr + 2f * f, py)
+                          path.arcTo(rect, 180f, -90f)
+                          path.close()
+                          c.drawPath(path, fill)
+                      }
+                  }
+
+                  if (s.kind != Kind.IDLE) {
+                      val a = (255f * contentAlpha).toInt()
+                      val layer = c.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), max(0, min(255, a)))
+                      c.translate(0f, (contentAlpha - 1f) * 8f * u)
+                      drawContent(c, s, cx)
+                      c.restoreToCount(layer)
+                  }
+                  c.restoreToCount(outer)
+              }
+
+              private fun drawContent(c: Canvas, s: UiState, cx: Float) {
+                  when (s.kind) {
+                      Kind.PILL -> drawPill(c, s, cx)
+                      Kind.PANEL_NOTIF -> drawNotif(c, s, cx)
+                      Kind.PANEL_CALL -> drawCall(c, s, cx)
+                      Kind.PANEL_MUSIC -> drawMusic(c, s, cx)
+                      Kind.PANEL_LIST -> drawRows(c, s, cx, "Tidak ada aktivitas")
+                      Kind.PANEL_NOTIFS -> drawRows(c, s, cx, "Tidak ada notifikasi")
+                      Kind.PANEL_QUICK -> drawQuick(c, s, cx)
+                      else -> {
+                      }
+                  }
+              }
+
+              private fun text(
+                  c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int,
+                  bold: Boolean = false, align: Paint.Align = Paint.Align.LEFT,
+                  maxW: Float = 0f, shrink: Boolean = false
+              ) {
+                  tp.color = color
+                  tp.textAlign = align
+                  tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                  tp.textSize = size * u
+                  var str = s
+                  if (maxW > 0f) {
+                      val w = tp.measureText(str)
+                      if (w > maxW) {
+                          if (shrink) {
+                              tp.textSize = max(size * u * maxW / w, 7f * u)
+                          }
+                          if (tp.measureText(str) > maxW) {
+                              str = TextUtils.ellipsize(str, tp, maxW, TextUtils.TruncateAt.END).toString()
+                          }
+                      }
+                  }
+                  c.drawText(str, x, y, tp)
+              }
+
+              private fun drawBmp(c: Canvas, bmp: Bitmap, l: Float, t: Float, r: Float, b: Float, rad: Float) {
+                  path.reset()
+                  rect.set(l, t, r, b)
+                  path.addRoundRect(rect, rad, rad, Path.Direction.CW)
+                  val sv = c.save()
+                  c.clipPath(path)
+                  src.set(0, 0, bmp.width, bmp.height)
+                  c.drawBitmap(bmp, src, rect, bmpPaint)
+                  c.restoreToCount(sv)
+              }
+
+              private fun avatar(c: Canvas, bmp: Bitmap?, color: Int, label: String, cx: Float, cy: Float, r: Float) {
+                  if (bmp != null) {
+                      drawBmp(c, bmp, cx - r, cy - r, cx + r, cy + r, r)
+                  } else {
+                      fill.color = color
+                      c.drawCircle(cx, cy, r, fill)
+                      val ch = if (label.isNotEmpty()) label.substring(0, 1).uppercase() else "?"
+                      text(c, ch, cx, cy + 4.5f * u, 12f, Color.WHITE, true, Paint.Align.CENTER)
+                  }
+              }
+
+              private fun button(c: Canvas, label: String, color: Int, l: Float, t: Float, r: Float, b: Float, id: String) {
+                  fill.color = color
+                  rect.set(l, t, r, b)
+                  c.drawRoundRect(rect, (b - t) / 2f, (b - t) / 2f, fill)
+                  text(c, label, (l + r) / 2f, (t + b) / 2f + 4.5f * u, 12f, Color.WHITE, true, Paint.Align.CENTER)
+                  hits.add(Hit(id, RectF(l, t, r, b)))
+              }
+
+              private fun drawBt(c: Canvas, x: Float, y: Float, k: Float, color: Int, w: Float) {
+                  stroke.color = color
+                  stroke.strokeWidth = w
+                  path.reset()
+                  path.moveTo(x - 5f * k, y - 5f * k)
+                  path.lineTo(x + 5f * k, y + 5f * k)
+                  path.lineTo(x, y + 10f * k)
+                  path.lineTo(x, y - 10f * k)
+                  path.lineTo(x + 5f * k, y - 5f * k)
+                  path.lineTo(x - 5f * k, y + 5f * k)
+                  c.drawPath(path, stroke)
+              }
+
+              private fun drawMini(c: Canvas, m: Mini, x: Float, cy: Float, maxW: Float) {
+                  when (m.type) {
+                      Mini.ART -> {
+                          val hh = 14f * u
+                          val b = m.bmp
+                          if (b != null) {
+                              drawBmp(c, b, x - hh / 2f, cy - hh / 2f, x + hh / 2f, cy + hh / 2f, 3.5f * u)
+                          } else {
+                              fill.color = m.color
+                              rect.set(x - hh / 2f, cy - hh / 2f, x + hh / 2f, cy + hh / 2f)
+                              c.drawRoundRect(rect, 3.5f * u, 3.5f * u, fill)
+                          }
+                      }
+                      Mini.BARS -> {
+                          val t = System.currentTimeMillis() / 1000f
+                          for (i in 0..2) {
+                              val hh = (0.35f + 0.65f * abs(sin(t * 4.2f + i * 1.7f))) * 12f * u
+                              val bx = x + 4f * u + i * 6f * u
+                              fill.color = C_TEAL
+                              rect.set(bx, cy - hh / 2f, bx + 3f * u, cy + hh / 2f)
+                              c.drawRoundRect(rect, 1.5f * u, 1.5f * u, fill)
+                          }
+                      }
+                      Mini.BOLT -> {
+                          path.reset()
+                          path.moveTo(x + 2.5f * u, cy - 8f * u)
+                          path.lineTo(x - 6.5f * u, cy + 1f * u)
+                          path.lineTo(x - 1.5f * u, cy + 1f * u)
+                          path.lineTo(x - 3.5f * u, cy + 8f * u)
+                          path.lineTo(x + 6.5f * u, cy - 2f * u)
+                          path.lineTo(x + 1.5f * u, cy - 2f * u)
+                          path.close()
+                          fill.color = C_TEAL
+                          c.drawPath(path, fill)
+                      }
+                      Mini.BT -> drawBt(c, x, cy, u, C_SKY, 1.5f * u)
+                      Mini.ALARM -> {
+                          stroke.color = C_ORANGE
+                          stroke.strokeWidth = 1.5f * u
+                          c.drawCircle(x, cy, 6f * u, stroke)
+                          path.reset()
+                          path.moveTo(x, cy - 3.5f * u)
+                          path.lineTo(x, cy)
+                          path.lineTo(x + 3f * u, cy)
+                          c.drawPath(path, stroke)
+                      }
+                      Mini.RING -> {
+                          stroke.color = C_ORANGE
+                          stroke.strokeWidth = 2f * u
+                          c.drawCircle(x, cy, 6f * u, stroke)
+                      }
+                      else -> text(c, m.text, x, cy + 4f * u, 11f, m.color, true, Paint.Align.LEFT, maxW, true)
+                  }
+              }
+
+              private fun drawPill(c: Canvas, s: UiState, cx: Float) {
+                  val w = tgt[0]
+                  val cy = tgt[1] / 2f
+                  val l = s.left
+                  val r = s.right
+                  if (l != null) drawMini(c, l, cx - w / 2f + 15f * u, cy, 0f)
+                  if (r != null) drawMini(c, r, cx + 16f * u, cy, w / 2f - 16f * u - 7f * u)
+                  if (s.dots > 1) {
+                      for (i in 0 until s.dots) {
+                          fill.color = Color.WHITE
+                          fill.alpha = if (i == s.dotIdx) 255 else 100
+                          c.drawCircle(cx + (i - (s.dots - 1) / 2f) * 10f * u, tgt[1] + 8f * u, 2.5f * u, fill)
+                      }
+                      fill.alpha = 255
+                  }
+              }
+
+              private fun drawNotif(c: Canvas, s: UiState, cx: Float) {
+                  val x0 = cx - panelW / 2f
+                  val top = statusH
+                  avatar(c, s.bmp, s.color, s.title, x0 + 26f * u, top + 29f * u, 14f * u)
+                  text(c, s.title, x0 + 50f * u, top + 26f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 140f * u)
+                  text(c, s.sub, x0 + 50f * u, top + 43f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 70f * u)
+                  text(c, s.time, x0 + panelW - 18f * u, top + 26f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
+                  hits.add(Hit("notif", RectF(x0, top, x0 + panelW, top + panelH(s))))
+              }
+
+              private fun drawCall(c: Canvas, s: UiState, cx: Float) {
+                  val x0 = cx - panelW / 2f
+                  val top = statusH
+                  avatar(c, null, Color.parseColor("#7F77DD"), s.title, x0 + 26f * u, top + 30f * u, 16f * u)
+                  text(c, s.title, x0 + 52f * u, top + 28f * u, 14f, Color.WHITE, true, Paint.Align.LEFT, panelW - 70f * u)
+                  text(c, "Panggilan masuk", x0 + 52f * u, top + 44f * u, 11f, C_GRAY)
+                  button(c, "Tolak", C_RED, x0 + 16f * u, top + 62f * u, x0 + 156f * u, top + 88f * u, "decline")
+                  button(c, "Angkat", C_GREEN, x0 + 168f * u, top + 62f * u, x0 + 308f * u, top + 88f * u, "answer")
+              }
+
+              private fun drawMusic(c: Canvas, s: UiState, cx: Float) {
+                  val x0 = cx - panelW / 2f
+                  val top = statusH
+                  val b = s.bmp
+                  if (b != null) {
+                      drawBmp(c, b, x0 + 18f * u, top + 22f * u, x0 + 58f * u, top + 62f * u, 8f * u)
+                  } else {
+                      fill.color = s.color
+                      rect.set(x0 + 18f * u, top + 22f * u, x0 + 58f * u, top + 62f * u)
+                      c.drawRoundRect(rect, 8f * u, 8f * u, fill)
+                  }
+                  text(c, s.title, x0 + 68f * u, top + 38f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 90f * u)
+                  text(c, s.sub, x0 + 68f * u, top + 54f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 90f * u)
+
+                  val tl = x0 + 18f * u
+                  val tw = panelW - 36f * u
+                  fill.color = C_TRACK
+                  rect.set(tl, top + 72f * u, tl + tw, top + 76f * u)
+                  c.drawRoundRect(rect, 2f * u, 2f * u, fill)
+                  fill.color = Color.WHITE
+                  rect.set(tl, top + 72f * u, tl + tw * max(0f, min(1f, s.progress)), top + 76f * u)
+                  c.drawRoundRect(rect, 2f * u, 2f * u, fill)
+                  hits.add(Hit("seek", RectF(tl, top + 62f * u, tl + tw, top + 86f * u), tl, tw))
+                  text(c, s.posText, tl, top + 92f * u, 11f, C_GRAY)
+                  text(c, s.durText, tl + tw, top + 92f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
+
+                  val cy = top + 108f * u
+                  fill.color = Color.WHITE
+
+                  val px = cx - 38f * u
+                  rect.set(px - 7f * u, cy - 7f * u, px - 4.5f * u, cy + 7f * u)
+                  c.drawRect(rect, fill)
+                  path.reset()
+                  path.moveTo(px + 6f * u, cy - 7f * u)
+                  path.lineTo(px + 6f * u, cy + 7f * u)
+                  path.lineTo(px - 4f * u, cy)
+                  path.close()
+                  c.drawPath(path, fill)
+                  hits.add(Hit("prev", RectF(px - 18f * u, cy - 18f * u, px + 18f * u, cy + 18f * u)))
+
+                  if (s.playing) {
+                      rect.set(cx - 6f * u, cy - 9f * u, cx - 2f * u, cy + 9f * u)
+                      c.drawRect(rect, fill)
+                      rect.set(cx + 2f * u, cy - 9f * u, cx + 6f * u, cy + 9f * u)
+                      c.drawRect(rect, fill)
+                  } else {
+                      path.reset()
+                      path.moveTo(cx - 6f * u, cy - 9f * u)
+                      path.lineTo(cx - 6f * u, cy + 9f * u)
+                      path.lineTo(cx + 8f * u, cy)
+                      path.close()
+                      c.drawPath(path, fill)
+                  }
+                  hits.add(Hit("toggle", RectF(cx - 20f * u, cy - 20f * u, cx + 20f * u, cy + 20f * u)))
+
+                  val nx = cx + 38f * u
+                  path.reset()
+                  path.moveTo(nx - 6f * u, cy - 7f * u)
+                  path.lineTo(nx - 6f * u, cy + 7f * u)
+                  path.lineTo(nx + 4f * u, cy)
+                  path.close()
+                  c.drawPath(path, fill)
+                  rect.set(nx + 4.5f * u, cy - 7f * u, nx + 7f * u, cy + 7f * u)
+                  c.drawRect(rect, fill)
+                  hits.add(Hit("next", RectF(nx - 18f * u, cy - 18f * u, nx + 18f * u, cy + 18f * u)))
+              }
+
+              private fun drawRows(c: Canvas, s: UiState, cx: Float, empty: String) {
+                  val x0 = cx - panelW / 2f
+                  val top = statusH
+                  if (s.rows.isEmpty()) {
+                      text(c, empty, cx, top + 52f * u, 12f, C_GRAY, false, Paint.Align.CENTER)
+                      return
+                  }
+                  for (i in s.rows.indices) {
+                      val row = s.rows[i]
+                      val rt = top + 22f * u + i * 36f * u
+                      if (i > 0) {
+                          fill.color = C_DARK
+                          rect.set(x0 + 18f * u, rt - 2f * u, x0 + panelW - 18f * u, rt - 1f * u)
+                          c.drawRect(rect, fill)
+                      }
+                      avatar(c, row.bmp, row.color, row.title, x0 + 30f * u, rt + 15f * u, 12f * u)
+                      val rightW = if (row.right.isNotEmpty()) 64f * u else 0f
+                      text(c, row.title, x0 + 50f * u, rt + 13f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 68f * u - rightW)
+                      text(c, row.sub, x0 + 50f * u, rt + 28f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 68f * u - rightW)
+                      if (row.right.isNotEmpty()) {
+                          text(c, row.right, x0 + panelW - 18f * u, rt + 20f * u, 14f, C_ORANGE, true, Paint.Align.RIGHT)
+                      }
+                      hits.add(Hit(row.id, RectF(x0, rt - 2f * u, x0 + panelW, rt + 34f * u)))
+                  }
+              }
+
+              private fun drawQuick(c: Canvas, s: UiState, cx: Float) {
+                  val x0 = cx - panelW / 2f
+                  val top = statusH
+                  val labels = arrayOf("Wifi", "Data", "Senter", "Bluetooth")
+                  val ids = arrayOf("wifi", "data", "torch", "bt")
+                  for (i in 0..3) {
+                      val tx = cx + (i - 1.5f) * 79f * u
+                      val on = s.tiles[i]
+                      fill.color = if (on) C_BLUE else C_DARK
+                      rect.set(tx - 25f * u, top + 22f * u, tx + 25f * u, top + 72f * u)
+                      c.drawRoundRect(rect, 15f * u, 15f * u, fill)
+                      val col = if (on) Color.WHITE else C_GRAY
+                      val ty = top + 47f * u
+                      when (i) {
+                          0 -> {
+                              stroke.color = col
+                              stroke.strokeWidth = 2f * u
+                              val wy = ty + 8f * u
+                              val radii = floatArrayOf(6f, 11f, 16f)
+                              for (rr in radii) {
+                                  rect.set(tx - rr * u, wy - rr * u, tx + rr * u, wy + rr * u)
+                                  c.drawArc(rect, 225f, 90f, false, stroke)
+                              }
+                              fill.color = col
+                              c.drawCircle(tx, wy, 2f * u, fill)
+                          }
+                          1 -> {
+                              fill.color = col
+                              for (k in 0..3) {
+                                  val bh = (5f + 4f * k) * u
+                                  val bx = tx - 11f * u + k * 6f * u
+                                  rect.set(bx, ty + 8f * u - bh, bx + 4f * u, ty + 8f * u)
+                                  c.drawRoundRect(rect, 1f * u, 1f * u, fill)
+                              }
+                          }
+                          2 -> {
+                              stroke.color = col
+                              stroke.strokeWidth = 2f * u
+                              c.drawCircle(tx, ty - 3f * u, 6f * u, stroke)
+                              fill.color = col
+                              rect.set(tx - 3f * u, ty + 4f * u, tx + 3f * u, ty + 10f * u)
+                              c.drawRect(rect, fill)
+                          }
+                          else -> drawBt(c, tx, ty, 1.2f * u, col, 1.9f * u)
+                      }
+                      text(c, labels[i], tx, top + 86f * u, 11f, C_GRAY, false, Paint.Align.CENTER)
+                      hits.add(Hit(ids[i], RectF(tx - 28f * u, top + 20f * u, tx + 28f * u, top + 92f * u)))
+                  }
+                  text(c, "Volume", x0 + 18f * u, top + 104f * u, 11f, C_GRAY)
+                  val tl = x0 + 18f * u
+                  val tw = panelW - 36f * u
+                  fill.color = C_TRACK
+                  rect.set(tl, top + 112f * u, tl + tw, top + 120f * u)
+                  c.drawRoundRect(rect, 4f * u, 4f * u, fill)
+                  fill.color = Color.WHITE
+                  rect.set(tl, top + 112f * u, tl + tw * max(0f, min(1f, s.volume)), top + 120f * u)
+                  c.drawRoundRect(rect, 4f * u, 4f * u, fill)
+                  hits.add(Hit("vol", RectF(tl - 8f * u, top + 104f * u, tl + tw + 8f * u, top + 130f * u), tl, tw))
+              }
+
+              // ------------------------------------------------------------------ touch
+
+              private fun hitAt(x: Float, y: Float): Hit? {
+                  for (i in hits.indices.reversed()) {
+                      if (hits[i].r.contains(x, y)) return hits[i]
+                  }
+                  return null
+              }
+
+              private fun isSlider(h: Hit?): Boolean = h != null && h.tw > 0f
+
+              private fun slider(x: Float, last: Boolean) {
+                  val h = downHit ?: return
+                  if (h.tw <= 0f) return
+                  val f = max(0f, min(1f, (x - h.tl) / h.tw))
+                  if (h.id == "vol") {
+                      host.onAction("vol", f)
+                  } else if (last) {
+                      host.onAction("seek", f)
+                  }
+              }
+
+              private val longRun = Runnable {
+                  longFired = true
+                  performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                  host.onLongPress(downX < width / 2f)
+              }
+
+              override fun onTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          host.onActive()
+                          downX = e.x
+                          downY = e.y
+                          moved = false
+                          longFired = false
+                          downHit = hitAt(e.x, e.y)
+                          val s = state
+                          if (s != null && (s.kind == Kind.IDLE || s.kind == Kind.PILL)) {
+                              postDelayed(longRun, 450L)
+                          }
+                          if (isSlider(downHit)) slider(e.x, false)
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) {
+                              moved = true
+                              removeCallbacks(longRun)
+                          }
+                          if (isSlider(downHit)) slider(e.x, false)
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          removeCallbacks(longRun)
+                          if (!longFired) {
+                              val dx = e.x - downX
+                              val dy = e.y - downY
+                              val hit = downHit
+                              if (hit != null && isSlider(hit)) {
+                                  slider(e.x, true)
+                              } else if (dy < -28f * u && abs(dy) > abs(dx)) {
+                                  host.onClose()
+                              } else if (abs(dx) > 28f * u && abs(dx) > abs(dy)) {
+                                  host.onSwipe(if (dx < 0f) 1 else -1)
+                              } else if (!moved) {
+                                  if (hit != null) host.onAction(hit.id, 0f) else host.onTapEmpty()
+                              }
+                          }
+                      }
+                      MotionEvent.ACTION_CANCEL -> {
+                          removeCallbacks(longRun)
+                      }
+                      else -> {
+                      }
+                  }
+                  return true
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/Prefs.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.content.Context
+
+          object Prefs {
+
+              val APPS: List<Pair<String, String>> = listOf(
+                  Pair("WhatsApp", "com.whatsapp"),
+                  Pair("WhatsApp Business", "com.whatsapp.w4b"),
+                  Pair("Telegram", "org.telegram.messenger"),
+                  Pair("Instagram", "com.instagram.android"),
+                  Pair("Messenger", "com.facebook.orca"),
+                  Pair("Line", "jp.naver.line.android"),
+                  Pair("TikTok", "com.zhiliaoapp.musically"),
+                  Pair("Gmail", "com.google.android.gm"),
+                  Pair("Pesan (SMS)", "com.google.android.apps.messaging")
+              )
+
+              private fun sp(c: Context) = c.getSharedPreferences("notch", Context.MODE_PRIVATE)
+
+              fun enabled(c: Context): Boolean = sp(c).getBoolean("enabled", true)
+
+              fun setEnabled(c: Context, v: Boolean) {
+                  sp(c).edit().putBoolean("enabled", v).apply()
+              }
+
+              fun widthPct(c: Context): Int = sp(c).getInt("w", 33)
+
+              fun setWidthPct(c: Context, v: Int) {
+                  sp(c).edit().putInt("w", v).apply()
+              }
+
+              fun extraDp(c: Context): Int = sp(c).getInt("h", 0)
+
+              fun setExtraDp(c: Context, v: Int) {
+                  sp(c).edit().putInt("h", v).apply()
+              }
+
+              fun offsetDp(c: Context): Int = sp(c).getInt("x", 0)
+
+              fun setOffsetDp(c: Context, v: Int) {
+                  sp(c).edit().putInt("x", v).apply()
+              }
+
+              fun apps(c: Context): Set<String> {
+                  val def = setOf("com.whatsapp", "com.whatsapp.w4b")
+                  val s = sp(c).getStringSet("apps", def) ?: def
+                  return HashSet(s)
+              }
+
+              fun setApps(c: Context, v: Set<String>) {
+                  sp(c).edit().putStringSet("apps", HashSet(v)).apply()
+              }
+          }
+          CAMES_EOF
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Siapkan APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk CamesNotch.apk
+
+      - name: Simpan APK sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CamesNotch-APK
+          path: CamesNotch.apk
+
+      - name: Publikasikan di Releases
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: CamesNotch build ${{ github.run_number }}
+          files: CamesNotch.apk
