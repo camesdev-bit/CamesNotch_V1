@@ -176,6 +176,271 @@ jobs:
           </vector>
           CAMES_EOF
           mkdir -p 'app/src/main/java/id/cames/notch'
+          cat > 'app/src/main/java/id/cames/notch/Demo.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.graphics.Color
+          import android.os.Handler
+          import android.os.Looper
+          import android.widget.Toast
+
+          class DemoController : NotchView.Host {
+
+              lateinit var v: NotchView
+
+              private class DAct(val type: Int, val left: Mini, val right: Mini, val row: Row)
+
+              private val h = Handler(Looper.getMainLooper())
+              private val coral = Color.parseColor("#D85A30")
+              private val orange = Color.parseColor("#EF9F27")
+              private val teal = Color.parseColor("#5DCAA5")
+              private val green = Color.parseColor("#1D9E75")
+
+              private var musicOn = false
+              private var timerOn = false
+              private var playing = true
+              private var posSec = 53
+              private var timerLeft = 300
+              private var exp = 0
+              private var idx = 0
+              private var trans: UiState? = null
+              private var torch = false
+              private var volume = 0.55f
+              private val total = 212
+
+              private val tick = object : Runnable {
+                  override fun run() {
+                      if (musicOn && playing) posSec = (posSec + 1) % total
+                      if (timerOn && timerLeft > 0) timerLeft -= 1
+                      if (timerOn && timerLeft == 0) timerOn = false
+                      render()
+                      h.postDelayed(this, 1000L)
+                  }
+              }
+
+              private val clearTrans = Runnable {
+                  trans = null
+                  render()
+              }
+
+              private val collapse = Runnable {
+                  exp = 0
+                  render()
+              }
+
+              fun start() {
+                  render()
+                  h.postDelayed(tick, 1000L)
+              }
+
+              fun stop() {
+                  h.removeCallbacksAndMessages(null)
+              }
+
+              fun toggleMusic() {
+                  musicOn = !musicOn
+                  if (!musicOn && exp == 1) exp = 0
+                  render()
+              }
+
+              fun toggleTimer() {
+                  timerOn = !timerOn
+                  if (timerOn) timerLeft = 300
+                  render()
+              }
+
+              fun showNotif() {
+                  showTransient(
+                      UiState(Kind.PANEL_NOTIF, title = "Budi", sub = "Bro, jadi bikin appnya?", time = "sekarang", color = green),
+                      4500L
+                  )
+              }
+
+              fun showCall() {
+                  showTransient(UiState(Kind.PANEL_CALL, title = "Mama"), 6000L)
+              }
+
+              fun showCharge() {
+                  showTransient(
+                      UiState(Kind.PILL, left = Mini(Mini.BOLT), right = Mini(Mini.TEXT, "82%", color = teal)),
+                      3500L
+                  )
+              }
+
+              fun showBt() {
+                  showTransient(
+                      UiState(Kind.PILL, left = Mini(Mini.BT), right = Mini(Mini.TEXT, "Buds Pro", color = Color.WHITE)),
+                      3500L
+                  )
+              }
+
+              fun showAlarm() {
+                  showTransient(
+                      UiState(Kind.PILL, left = Mini(Mini.ALARM, color = orange), right = Mini(Mini.TEXT, "06.00", color = orange)),
+                      4000L
+                  )
+              }
+
+              private fun showTransient(st: UiState, ms: Long) {
+                  exp = 0
+                  h.removeCallbacks(collapse)
+                  trans = st
+                  h.removeCallbacks(clearTrans)
+                  h.postDelayed(clearTrans, ms)
+                  render()
+              }
+
+              private fun fmt(s: Int): String = String.format("%d:%02d", s / 60, s % 60)
+
+              private fun fmtT(s: Int): String = String.format("%02d.%02d", s / 60, s % 60)
+
+              private fun acts(): List<DAct> {
+                  val l = ArrayList<DAct>()
+                  if (musicOn) {
+                      l.add(
+                          DAct(
+                              0, Mini(Mini.ART, color = coral), Mini(Mini.BARS),
+                              Row("Teh Hijau", "Tulus", coral, null, "", "music")
+                          )
+                      )
+                  }
+                  if (timerOn) {
+                      val t = fmtT(timerLeft)
+                      l.add(
+                          DAct(
+                              1, Mini(Mini.RING, color = orange), Mini(Mini.TEXT, t, color = orange),
+                              Row("Timer", "Hitung mundur", orange, null, t, "timer")
+                          )
+                      )
+                  }
+                  return l
+              }
+
+              private fun demoRows(): List<Row> {
+                  val g = Color.parseColor("#1D9E75")
+                  val b = Color.parseColor("#378ADD")
+                  val p = Color.parseColor("#7F77DD")
+                  return listOf(
+                      Row("Budi", "Bro, jadi bikin appnya?", g, null, "", "n:0"),
+                      Row("Grup Dev", "Update terbaru sudah rilis", b, null, "", "n:1"),
+                      Row("Mama", "Jangan lupa makan ya", g, null, "", "n:2"),
+                      Row("Kak Rina", "Filenya sudah aku kirim", p, null, "", "n:3"),
+                      Row("Pak Ahmad", "Besok jadi rapat jam 9", b, null, "", "n:4"),
+                      Row("Tim Cames", "Desain notch keren banget", g, null, "", "n:5")
+                  )
+              }
+
+              private fun build(): UiState {
+                  when (exp) {
+                      1 -> return UiState(
+                          Kind.PANEL_MUSIC, title = "Teh Hijau", sub = "Tulus", color = coral,
+                          progress = posSec.toFloat() / total.toFloat(), posText = fmt(posSec), durText = fmt(total),
+                          playing = playing
+                      )
+                      2 -> return UiState(Kind.PANEL_LIST, rows = acts().map { it.row })
+                      3 -> return UiState(Kind.PANEL_NOTIFS, rows = demoRows())
+                      4 -> return UiState(Kind.PANEL_QUICK, torch = torch, volume = volume)
+                      else -> {
+                      }
+                  }
+                  val t = trans
+                  if (t != null) return t
+                  val a = acts()
+                  if (a.isNotEmpty()) {
+                      val k = Math.floorMod(idx, a.size)
+                      val c = a[k]
+                      return UiState(
+                          Kind.PILL, left = c.left, right = c.right,
+                          dots = if (a.size > 1) a.size else 0, dotIdx = k
+                      )
+                  }
+                  return UiState(Kind.IDLE)
+              }
+
+              private fun render() {
+                  v.setState(build())
+              }
+
+              private fun setExp(e: Int) {
+                  exp = e
+                  h.removeCallbacks(collapse)
+                  if (e != 0) h.postDelayed(collapse, 8000L)
+                  render()
+              }
+
+              private fun close() {
+                  exp = 0
+                  trans = null
+                  h.removeCallbacks(collapse)
+                  h.removeCallbacks(clearTrans)
+                  render()
+              }
+
+              override fun onAction(id: String, frac: Float) {
+                  if (id == "toggle") {
+                      playing = !playing
+                  } else if (id == "prev" || id == "next") {
+                      posSec = 0
+                  } else if (id == "seek") {
+                      posSec = (frac * total).toInt()
+                  } else if (id == "vol") {
+                      volume = frac
+                  } else if (id == "torch") {
+                      torch = !torch
+                  } else if (id == "power") {
+                      Toast.makeText(v.context, "Di HP asli, ini membuka menu matikan HP.", Toast.LENGTH_SHORT).show()
+                      close()
+                      return
+                  } else if (id == "music") {
+                      setExp(1)
+                      return
+                  } else if (id == "answer" || id == "decline" || id == "notif" || id.startsWith("n:")) {
+                      close()
+                      return
+                  }
+                  render()
+              }
+
+              override fun onTapEmpty() {
+                  if (exp != 0 || trans != null) return
+                  val a = acts()
+                  if (a.size >= 2) {
+                      setExp(2)
+                  } else if (a.size == 1 && a[0].type == 0) {
+                      setExp(1)
+                  }
+              }
+
+              override fun onLongPress(left: Boolean) {
+                  if (exp != 0) return
+                  setExp(if (left) 3 else 4)
+              }
+
+              override fun onSwipe(dir: Int) {
+                  if (exp != 0) return
+                  if (acts().size >= 2) {
+                      idx += dir
+                      v.nudge(dir)
+                      render()
+                  }
+              }
+
+              override fun onClose() {
+                  close()
+              }
+
+              override fun onActive() {
+                  if (exp != 0) {
+                      h.removeCallbacks(collapse)
+                      h.postDelayed(collapse, 8000L)
+                  }
+              }
+
+              override fun onSettled() {
+              }
+          }
+          CAMES_EOF
+          mkdir -p 'app/src/main/java/id/cames/notch'
           cat > 'app/src/main/java/id/cames/notch/MainActivity.kt' <<'CAMES_EOF'
           package id.cames.notch
 
@@ -184,12 +449,15 @@ jobs:
           import android.content.Intent
           import android.content.pm.PackageManager
           import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
           import android.os.Build
           import android.os.Bundle
           import android.provider.Settings
           import android.view.View
           import android.widget.Button
           import android.widget.CheckBox
+          import android.widget.FrameLayout
           import android.widget.LinearLayout
           import android.widget.ScrollView
           import android.widget.SeekBar
@@ -202,6 +470,7 @@ jobs:
               private var st1: TextView? = null
               private var st2: TextView? = null
               private var density = 1f
+              private var demo: DemoController? = null
 
               private fun dp(x: Int): Int = (x * density).toInt()
 
@@ -210,7 +479,7 @@ jobs:
                   t.text = text
                   t.textSize = size
                   t.setTextColor(color)
-                  if (bold) t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
+                  if (bold) t.setTypeface(t.typeface, Typeface.BOLD)
                   t.setPadding(0, dp(6), 0, dp(2))
                   return t
               }
@@ -218,8 +487,25 @@ jobs:
               private fun button(text: String, onClick: () -> Unit): Button {
                   val b = Button(this)
                   b.text = text
+                  b.isAllCaps = false
                   b.setOnClickListener { onClick() }
                   return b
+              }
+
+              private fun chipRow(vararg items: Pair<String, () -> Unit>): LinearLayout {
+                  val r = LinearLayout(this)
+                  r.orientation = LinearLayout.HORIZONTAL
+                  for (p in items) {
+                      val b = Button(this)
+                      b.text = p.first
+                      b.textSize = 12f
+                      b.isAllCaps = false
+                      b.setPadding(0, 0, 0, 0)
+                      val action = p.second
+                      b.setOnClickListener { action() }
+                      r.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                  }
+                  return r
               }
 
               private fun slider(
@@ -269,6 +555,71 @@ jobs:
                   root.addView(label("CamesNotch", 28f, true, dark))
                   root.addView(label("Notch ala iPhone untuk Android, tanpa iklan.", 14f, false, grey))
 
+                  // ------------------------------------------------------------ demo
+                  root.addView(label("Coba langsung", 16f, true, dark))
+                  val frameW = resources.displayMetrics.widthPixels - dp(40)
+                  val du = frameW / 360f
+                  val frame = FrameLayout(this)
+                  val bg = GradientDrawable()
+                  bg.setColor(Color.parseColor("#185FA5"))
+                  bg.cornerRadius = dp(20).toFloat()
+                  frame.background = bg
+                  root.addView(frame, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (234f * du).toInt()))
+
+                  val clock = TextView(this)
+                  clock.text = "09.41"
+                  clock.setTextColor(Color.WHITE)
+                  clock.textSize = 12f
+                  clock.setTypeface(clock.typeface, Typeface.BOLD)
+                  val clockLp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+                  clockLp.leftMargin = (26f * du).toInt()
+                  clockLp.topMargin = (4f * du).toInt()
+                  frame.addView(clock, clockLp)
+
+                  val ctl = DemoController()
+                  val nv = NotchView(this, ctl)
+                  ctl.v = nv
+                  demo = ctl
+                  frame.addView(
+                      nv,
+                      FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                  )
+                  var configured = false
+                  frame.addOnLayoutChangeListener { _, l, _, r, _, _, _, _, _ ->
+                      val w = r - l
+                      if (w > 0 && !configured) {
+                          configured = true
+                          val uu = w / 360f
+                          nv.configure(uu, 0.33f * 360f * uu, 26f * uu, 324f * uu)
+                          ctl.start()
+                      }
+                  }
+
+                  root.addView(
+                      chipRow(
+                          Pair("Musik", { ctl.toggleMusic() }),
+                          Pair("Timer", { ctl.toggleTimer() }),
+                          Pair("Notif WA", { ctl.showNotif() }),
+                          Pair("Telepon", { ctl.showCall() })
+                      )
+                  )
+                  root.addView(
+                      chipRow(
+                          Pair("Daya", { ctl.showCharge() }),
+                          Pair("Bluetooth", { ctl.showBt() }),
+                          Pair("Alarm", { ctl.showAlarm() })
+                      )
+                  )
+                  root.addView(
+                      label(
+                          "Nyalakan Musik dan Timer, lalu ketuk notch (buka musik atau daftar), geser kiri/kanan " +
+                                  "(pindah mode), tekan lama sisi kiri (notifikasi), tekan lama sisi kanan " +
+                                  "(senter, volume, matikan HP).",
+                          12f, false, grey
+                      )
+                  )
+
+                  // ----------------------------------------------------- permissions
                   root.addView(label("1. Akses notifikasi", 16f, true, dark))
                   val s1 = label("", 14f, false, grey)
                   st1 = s1
@@ -293,6 +644,7 @@ jobs:
                       )
                   )
 
+                  // ---------------------------------------------------------- settings
                   root.addView(label("Pengaturan", 16f, true, dark))
                   val sw = Switch(this)
                   sw.text = "Notch aktif"
@@ -329,7 +681,7 @@ jobs:
                       root.addView(cb)
                   }
 
-                  root.addView(label("Coba", 16f, true, dark))
+                  root.addView(label("Coba di notch asli", 16f, true, dark))
                   root.addView(button("Tes notifikasi di notch") {
                       if (NotchController.isReady()) {
                           NotchController.demo()
@@ -351,6 +703,11 @@ jobs:
                   val a = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
                   st1?.text = if (l.contains(packageName)) "Aktif" else "Belum aktif"
                   st2?.text = if (a.contains(packageName)) "Aktif" else "Belum aktif"
+              }
+
+              override fun onDestroy() {
+                  demo?.stop()
+                  super.onDestroy()
               }
           }
           CAMES_EOF
@@ -407,7 +764,7 @@ jobs:
               val durText: String = "",
               val playing: Boolean = false,
               val rows: List<Row> = emptyList(),
-              val tiles: BooleanArray = BooleanArray(4),
+              val torch: Boolean = false,
               val volume: Float = 0f
           )
           CAMES_EOF
@@ -451,7 +808,6 @@ jobs:
           import android.accessibilityservice.AccessibilityService
           import android.app.Notification
           import android.app.PendingIntent
-          import android.bluetooth.BluetoothAdapter
           import android.bluetooth.BluetoothDevice
           import android.content.BroadcastReceiver
           import android.content.ComponentName
@@ -469,8 +825,8 @@ jobs:
           import android.media.session.MediaController
           import android.media.session.MediaSessionManager
           import android.media.session.PlaybackState
-          import android.net.wifi.WifiManager
           import android.os.Build
+          import android.os.Bundle
           import android.os.Handler
           import android.os.Looper
           import android.os.SystemClock
@@ -497,6 +853,8 @@ jobs:
 
               private class Act(val type: Int, val left: Mini, val right: Mini, val row: Row)
 
+              private class Item(val title: String, val sub: String, val time: Long, val pi: PendingIntent?, val sbn: StatusBarNotification)
+
               private val ORANGE = Color.parseColor("#EF9F27")
               private val TEAL = Color.parseColor("#5DCAA5")
               private val CORAL = Color.parseColor("#D85A30")
@@ -508,7 +866,6 @@ jobs:
               private var wm: WindowManager? = null
               private var view: NotchView? = null
               private var lp: WindowManager.LayoutParams? = null
-              private var unit = 2f
 
               private var mgr: MediaSessionManager? = null
               private var sessions: List<MediaController> = emptyList()
@@ -521,12 +878,14 @@ jobs:
               private var trans: UiState? = null
               private var transOpen: PendingIntent? = null
               private var exp = Exp.NONE
-              private var shift = 0
-              private var notifList: List<StatusBarNotification> = emptyList()
+              private var actIdx = 0
+              private var itemList: List<Item> = emptyList()
 
               private var torchId: String? = null
               private var torchOn = false
               private var torchRegistered = false
+
+              private val timeRe = Regex("(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
 
               // ------------------------------------------------------------ lifecycle
 
@@ -615,11 +974,6 @@ jobs:
                   val dm = s.resources.displayMetrics
                   if (dm.widthPixels > dm.heightPixels) return
                   val u = dm.widthPixels / 360f
-                  unit = u
-
-                  var sb = 30f * u
-                  val sbId = s.resources.getIdentifier("status_bar_height", "dimen", "android")
-                  if (sbId > 0) sb = s.resources.getDimensionPixelSize(sbId).toFloat()
 
                   var cutB = 0f
                   var cutW = 0f
@@ -643,7 +997,7 @@ jobs:
                   val pw = 324f * u
 
                   val v = NotchView(s, this)
-                  v.configure(u, nw, nh, sb, pw)
+                  v.configure(u, nw, nh, pw)
 
                   val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -651,8 +1005,8 @@ jobs:
                           WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                           WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
                   val l = WindowManager.LayoutParams(
-                      nw.toInt(),
-                      nh.toInt(),
+                      v.smallW(),
+                      v.smallH(),
                       WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                       flags,
                       PixelFormat.TRANSLUCENT
@@ -694,12 +1048,16 @@ jobs:
 
               // --------------------------------------------------------------- window
 
-              private fun growWindow(v: NotchView) {
+              private fun setWin(w: Int, hh: Int, touchable: Boolean) {
+                  val v = view ?: return
                   val l = lp ?: return
-                  val slack = (14f * unit).toInt()
-                  l.width = max(l.width, v.targetW() + slack)
-                  l.height = max(l.height, v.targetH() + slack)
-                  l.flags = l.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                  l.width = w
+                  l.height = hh
+                  l.flags = if (touchable) {
+                      l.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                  } else {
+                      l.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                  }
                   try {
                       wm?.updateViewLayout(v, l)
                   } catch (e: Exception) {
@@ -709,19 +1067,23 @@ jobs:
               override fun onSettled() {
                   val v = view ?: return
                   val l = lp ?: return
-                  l.width = v.targetW()
-                  l.height = v.targetH()
-                  l.flags = l.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                  try {
-                      wm?.updateViewLayout(v, l)
-                  } catch (e: Exception) {
-                  }
+                  val w = v.restW()
+                  val hh = v.restH()
+                  val locked = (l.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0
+                  if (l.width != w || l.height != hh || locked) setWin(w, hh, true)
               }
 
               private fun render() {
                   val v = view ?: return
+                  val l = lp ?: return
                   val st = buildState()
-                  if (v.setState(st)) growWindow(v)
+                  val needW = v.tightW(st)
+                  val needH = v.tightH(st)
+                  if (needW > l.width || needH > l.height) {
+                      v.hold(needW, needH)
+                      setWin(v.bigW(), v.bigH(), false)
+                  }
+                  v.setState(st)
                   scheduleTicks()
               }
 
@@ -730,7 +1092,7 @@ jobs:
               private fun scheduleTicks() {
                   h.removeCallbacks(tickRun)
                   val music = exp == Exp.MUSIC && media?.playbackState?.state == PlaybackState.STATE_PLAYING
-                  val timer = timerRemaining() > 0
+                  val timer = timerRemaining() > 0L
                   if (music) {
                       h.postDelayed(tickRun, 500L)
                   } else if (timer) {
@@ -761,16 +1123,17 @@ jobs:
                       )
                   }
                   val a = acts()
-                  if (a.size >= 2) {
+                  if (a.isNotEmpty()) {
+                      val k = Math.floorMod(actIdx, a.size)
+                      val cur = a[k]
                       return UiState(
                           Kind.PILL,
-                          left = a[0].left,
-                          right = a[1].right,
-                          dots = a.size,
-                          dotIdx = Math.floorMod(shift, a.size)
+                          left = cur.left,
+                          right = cur.right,
+                          dots = if (a.size > 1) a.size else 0,
+                          dotIdx = k
                       )
                   }
-                  if (a.size == 1) return UiState(Kind.PILL, left = a[0].left, right = a[0].right)
                   return UiState(Kind.IDLE)
               }
 
@@ -792,7 +1155,7 @@ jobs:
                       )
                   }
                   val rem = timerRemaining()
-                  if (rem > 0) {
+                  if (rem > 0L) {
                       val t = fmtSec(rem)
                       list.add(
                           Act(
@@ -802,15 +1165,6 @@ jobs:
                               Row("Timer", "Hitung mundur", ORANGE, null, t, "timer")
                           )
                       )
-                  }
-                  if (list.size >= 2) {
-                      val k = Math.floorMod(shift, list.size)
-                      if (k > 0) {
-                          val rotated = ArrayList<Act>()
-                          rotated.addAll(list.subList(k, list.size))
-                          rotated.addAll(list.subList(0, k))
-                          return rotated
-                      }
                   }
                   return list
               }
@@ -854,25 +1208,10 @@ jobs:
                   val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                   val mx = max(1, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
                   val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / mx.toFloat()
-                  var wifi = false
-                  try {
-                      val wmgr = c.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                      wifi = wmgr.isWifiEnabled
-                  } catch (e: Exception) {
-                  }
-                  var data = false
-                  try {
-                      data = Settings.Global.getInt(c.contentResolver, "mobile_data", 1) == 1
-                  } catch (e: Exception) {
-                  }
-                  var bt = false
-                  try {
-                      val ad = BluetoothAdapter.getDefaultAdapter()
-                      bt = ad != null && ad.isEnabled
-                  } catch (e: Exception) {
-                  }
-                  return UiState(Kind.PANEL_QUICK, tiles = booleanArrayOf(wifi, data, torchOn, bt), volume = vol)
+                  return UiState(Kind.PANEL_QUICK, torch = torchOn, volume = vol)
               }
+
+              // -------------------------------------------------- notification rows
 
               private fun notifRowsNow(): List<Row> {
                   val l = listener ?: return emptyList()
@@ -884,16 +1223,76 @@ jobs:
                       null
                   }
                   if (all == null) return emptyList()
-                  val f = all
-                      .filter { apps.contains(it.packageName) && (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 }
-                      .sortedByDescending { it.postTime }
-                      .take(4)
-                  notifList = f
+
+                  val mine = all.filter { apps.contains(it.packageName) }
+                  val kids = mine.filter { (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 }
+                  val use = (if (kids.isNotEmpty()) kids else mine).sortedByDescending { it.postTime }
+
+                  val items = ArrayList<Item>()
+                  val seen = HashSet<String>()
+                  for (sbn in use) {
+                      for (item in itemsOf(sbn)) {
+                          val key = item.title + "|" + item.sub
+                          if (seen.add(key)) items.add(item)
+                      }
+                      if (items.size >= 40) break
+                  }
+                  itemList = items
                   val rows = ArrayList<Row>()
-                  for (i in f.indices) {
-                      rows.add(rowOf(f[i], "n:" + i))
+                  for (i in items.indices) {
+                      val item = items[i]
+                      rows.add(Row(item.title, item.sub, colorFor(item.sbn.packageName), iconOf(item.sbn), "", "n:" + i))
                   }
                   return rows
+              }
+
+              private fun itemsOf(sbn: StatusBarNotification): List<Item> {
+                  val n = sbn.notification
+                  val ex = n.extras
+                  val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+                  val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                  val out = ArrayList<Item>()
+                  try {
+                      val msgs = ex.getParcelableArray(Notification.EXTRA_MESSAGES)
+                      if (msgs != null && msgs.isNotEmpty()) {
+                          for (i in msgs.indices.reversed()) {
+                              val b = msgs[i] as? Bundle ?: continue
+                              val t = b.getCharSequence("text")?.toString() ?: continue
+                              var who = b.getCharSequence("sender")?.toString()
+                              if (who == null) {
+                                  val pb = b.getBundle("sender_person")
+                                  who = pb?.getCharSequence("name")?.toString()
+                              }
+                              val head = if (title.isNotEmpty() && (who == null || who == title)) title
+                              else if (who != null) who else title
+                              out.add(Item(head, t, sbn.postTime, n.contentIntent, sbn))
+                              if (out.size >= 8) break
+                          }
+                      }
+                  } catch (e: Exception) {
+                  }
+                  if (out.isEmpty()) {
+                      try {
+                          val lines = ex.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                          if (lines != null && lines.isNotEmpty()) {
+                              for (i in lines.indices.reversed()) {
+                                  val ln = lines[i].toString()
+                                  val k = ln.indexOf(": ")
+                                  if (k > 0) {
+                                      out.add(Item(ln.substring(0, k), ln.substring(k + 2), sbn.postTime, n.contentIntent, sbn))
+                                  } else {
+                                      out.add(Item(title, ln, sbn.postTime, n.contentIntent, sbn))
+                                  }
+                                  if (out.size >= 8) break
+                              }
+                          }
+                      } catch (e: Exception) {
+                      }
+                  }
+                  if (out.isEmpty() && (title.isNotEmpty() || text.isNotEmpty())) {
+                      out.add(Item(title, text, sbn.postTime, n.contentIntent, sbn))
+                  }
+                  return out
               }
 
               private fun rowOf(sbn: StatusBarNotification, id: String): Row {
@@ -931,7 +1330,7 @@ jobs:
 
               private fun timerRemaining(): Long {
                   if (timerEnd <= 0L) return 0L
-                  val r = (timerEnd - System.currentTimeMillis()) / 1000L
+                  val r = (timerEnd - System.currentTimeMillis() + 500L) / 1000L
                   return if (r > 0L) r else 0L
               }
 
@@ -963,16 +1362,17 @@ jobs:
                       if (Prefs.apps(ctx).contains(sbn.packageName) && !isGroup && !sbn.isOngoing &&
                           n.category != Notification.CATEGORY_CALL
                       ) {
-                          val row = rowOf(sbn, "notif")
-                          if (row.title.isNotEmpty() || row.sub.isNotEmpty()) {
+                          val its = itemsOf(sbn)
+                          if (its.isNotEmpty()) {
+                              val first = its[0]
                               showTransient(
                                   UiState(
                                       Kind.PANEL_NOTIF,
-                                      title = row.title,
-                                      sub = row.sub,
+                                      title = first.title,
+                                      sub = first.sub,
                                       time = "sekarang",
-                                      color = row.color,
-                                      bmp = row.bmp
+                                      color = colorFor(sbn.packageName),
+                                      bmp = iconOf(sbn)
                                   ), 5000L, n.contentIntent
                               )
                               return
@@ -992,6 +1392,48 @@ jobs:
                   return s.contains("deskclock") || s.contains("clock") || s.contains("alarm")
               }
 
+              private fun textOf(n: Notification): String {
+                  val ex = n.extras
+                  val sb = StringBuilder()
+                  val keys = listOf(
+                      Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_SUB_TEXT,
+                      Notification.EXTRA_BIG_TEXT, Notification.EXTRA_INFO_TEXT
+                  )
+                  for (k in keys) {
+                      val v = ex.getCharSequence(k)
+                      if (v != null) sb.append(v.toString()).append(' ')
+                  }
+                  return sb.toString()
+              }
+
+              private fun parseTimerEnd(n: Notification): Long {
+                  val ex = n.extras
+                  if (ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) &&
+                      ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
+                  ) {
+                      return n.`when`
+                  }
+                  val m = timeRe.find(textOf(n)) ?: return 0L
+                  val a = m.groupValues[1].toLong()
+                  val b = m.groupValues[2].toLong()
+                  val c = m.groupValues[3]
+                  val secs = if (c.isEmpty()) a * 60L + b else a * 3600L + b * 60L + c.toLong()
+                  return if (secs > 0L) System.currentTimeMillis() + secs * 1000L else 0L
+              }
+
+              private fun looksLikeTimer(sbn: StatusBarNotification): Boolean {
+                  val n = sbn.notification
+                  val txt = textOf(n).lowercase()
+                  val chan = (n.channelId ?: "").lowercase()
+                  if (txt.contains("timer") || txt.contains("pengatur waktu") || txt.contains("hitung mundur") ||
+                      txt.contains("countdown") || chan.contains("timer")
+                  ) {
+                      return true
+                  }
+                  if (txt.contains("alarm") || chan.contains("alarm")) return false
+                  return sbn.isOngoing
+              }
+
               private fun scanNotifs() {
                   val l = listener ?: return
                   val all = try {
@@ -1001,6 +1443,7 @@ jobs:
                   }
                   if (all == null) return
                   var tEnd = 0L
+                  var seenTimer = false
                   var ring = false
                   var ci: CallInfo? = null
                   for (sbn in all) {
@@ -1010,17 +1453,20 @@ jobs:
                           val c = parseCall(sbn)
                           if (c != null) ci = c
                       } else if (isClock(sbn.packageName) || cat == Notification.CATEGORY_ALARM) {
-                          val ex = n.extras
                           if (n.fullScreenIntent != null) {
                               ring = true
-                          } else if (ex.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) &&
-                              ex.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
-                          ) {
-                              tEnd = n.`when`
+                          } else if (looksLikeTimer(sbn)) {
+                              seenTimer = true
+                              val e = parseTimerEnd(n)
+                              if (e > 0L) tEnd = e
                           }
                       }
                   }
-                  timerEnd = tEnd
+                  if (tEnd > 0L) {
+                      timerEnd = tEnd
+                  } else if (!seenTimer) {
+                      timerEnd = 0L
+                  }
                   alarmRinging = ring
                   call = ci
               }
@@ -1108,6 +1554,12 @@ jobs:
 
               // ---------------------------------------------------------------- media
 
+              private fun isBlockedPkg(p: String): Boolean {
+                  val s = p.lowercase()
+                  return s == "id.cames.notch" || s.contains("record") || s.contains("screen") ||
+                          s.contains("capture") || s.contains("smartshot")
+              }
+
               private val mediaCb = object : MediaController.Callback() {
                   override fun onPlaybackStateChanged(state: PlaybackState?) {
                       pickMedia()
@@ -1124,13 +1576,17 @@ jobs:
               }
 
               private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { list ->
+                  applySessions(list ?: emptyList<MediaController>())
+              }
+
+              private fun applySessions(list: List<MediaController>) {
                   for (c in sessions) {
                       try {
                           c.unregisterCallback(mediaCb)
                       } catch (e: Exception) {
                       }
                   }
-                  sessions = list ?: emptyList()
+                  sessions = list.filter { !isBlockedPkg(it.packageName) }
                   for (c in sessions) {
                       try {
                           c.registerCallback(mediaCb, h)
@@ -1150,21 +1606,7 @@ jobs:
                   } catch (e: Exception) {
                       emptyList<MediaController>()
                   }
-                  for (c in sessions) {
-                      try {
-                          c.unregisterCallback(mediaCb)
-                      } catch (e: Exception) {
-                      }
-                  }
-                  sessions = list
-                  for (c in sessions) {
-                      try {
-                          c.registerCallback(mediaCb, h)
-                      } catch (e: Exception) {
-                      }
-                  }
-                  pickMedia()
-                  render()
+                  applySessions(list)
               }
 
               private fun pickMedia() {
@@ -1260,7 +1702,8 @@ jobs:
               override fun onSwipe(dir: Int) {
                   if (exp != Exp.NONE) return
                   if (acts().size >= 2) {
-                      shift += dir
+                      actIdx += dir
+                      view?.nudge(dir)
                       view?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                       render()
                   }
@@ -1278,16 +1721,6 @@ jobs:
               private fun send(pi: PendingIntent?) {
                   try {
                       pi?.send()
-                  } catch (e: Exception) {
-                  }
-              }
-
-              private fun launch(action: String) {
-                  val c = a11y ?: return
-                  try {
-                      val i = Intent(action)
-                      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                      c.startActivity(i)
                   } catch (e: Exception) {
                   }
               }
@@ -1317,26 +1750,18 @@ jobs:
                       return
                   } else if (id.startsWith("n:")) {
                       val idx = id.substring(2).toIntOrNull() ?: -1
-                      if (idx >= 0 && idx < notifList.size) send(notifList[idx].notification.contentIntent)
-                      onClose()
-                      return
-                  } else if (id == "wifi") {
-                      launch(if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS)
-                      onClose()
-                      return
-                  } else if (id == "data") {
-                      launch(
-                          if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_INTERNET_CONNECTIVITY
-                          else Settings.ACTION_DATA_ROAMING_SETTINGS
-                      )
-                      onClose()
-                      return
-                  } else if (id == "bt") {
-                      launch(Settings.ACTION_BLUETOOTH_SETTINGS)
+                      if (idx >= 0 && idx < itemList.size) send(itemList[idx].pi)
                       onClose()
                       return
                   } else if (id == "torch") {
                       toggleTorch()
+                  } else if (id == "power") {
+                      try {
+                          a11y?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
+                      } catch (e: Exception) {
+                      }
+                      onClose()
+                      return
                   } else if (id == "vol") {
                       val c = a11y
                       if (c != null) {
@@ -1397,25 +1822,33 @@ jobs:
           import android.graphics.Typeface
           import android.text.TextPaint
           import android.text.TextUtils
+          import android.view.Choreographer
           import android.view.HapticFeedbackConstants
           import android.view.MotionEvent
+          import android.view.VelocityTracker
           import android.view.View
           import android.view.ViewConfiguration
           import kotlin.math.abs
           import kotlin.math.ceil
+          import kotlin.math.exp
           import kotlin.math.max
           import kotlin.math.min
+          import kotlin.math.roundToInt
           import kotlin.math.sin
 
           private val C_GRAY = Color.parseColor("#B4B2A9")
           private val C_DARK = Color.parseColor("#2C2C2A")
           private val C_TRACK = Color.parseColor("#444441")
-          private val C_BLUE = Color.parseColor("#378ADD")
           private val C_ORANGE = Color.parseColor("#EF9F27")
+          private val C_AMBER = Color.parseColor("#FFC94D")
           private val C_GREEN = Color.parseColor("#1D9E75")
           private val C_RED = Color.parseColor("#E24B4A")
+          private val C_RED_DARK = Color.parseColor("#4A2321")
+          private val C_RED_TEXT = Color.parseColor("#FF8F89")
           private val C_TEAL = Color.parseColor("#5DCAA5")
           private val C_SKY = Color.parseColor("#85B7EB")
+
+          private const val ROW = 36f
 
           class NotchView(ctx: Context, private val host: Host) : View(ctx) {
 
@@ -1429,26 +1862,43 @@ jobs:
                   fun onSettled()
               }
 
-              private class Hit(val id: String, val r: RectF, val tl: Float = 0f, val tw: Float = 0f)
+              private class Hit(
+                  val id: String,
+                  val r: RectF,
+                  val tl: Float = 0f,
+                  val tw: Float = 0f,
+                  val scroll: Boolean = false
+              )
 
               private var u = 2f
               private var collapsedW = 236f
               private var collapsedH = 52f
-              private var statusH = 60f
               private var panelW = 648f
 
               private var state: UiState? = null
-              private val cur = FloatArray(3)
-              private val vel = FloatArray(3)
-              private val tgt = FloatArray(3)
+
+              // springs: 0 = lebar leher/pil, 1 = tinggi panel, 2 = lebar panel, 3 = efek tekan
+              private val cur = FloatArray(4)
+              private val vel = FloatArray(4)
+              private val tgt = FloatArray(4)
+
               private var modeKey = -1
               private var contentAlpha = 1f
               private var contentDelay = 0f
+              private var slide = 0f
+              private var scrollY = 0f
+              private var flingV = 0f
+
               private var running = false
-              private var lastNs = 0L
+              private var holding = false
+              private var pendingStart = false
+              private var holdW = 0
+              private var holdH = 0
+              private var lastFrame = 0L
               private var barsRunning = false
 
               private val hits = ArrayList<Hit>()
+              private val listClip = RectF()
               private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
 
               private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -1463,9 +1913,13 @@ jobs:
               private var downY = 0f
               private var moved = false
               private var longFired = false
+              private var scrolling = false
+              private var inList = false
+              private var startScroll = 0f
               private var downHit: Hit? = null
+              private var tracker: VelocityTracker? = null
 
-              private val springK = 300f
+              private val springK = 240f
               private val springC = 24f
 
               init {
@@ -1474,11 +1928,12 @@ jobs:
                   stroke.strokeJoin = Paint.Join.ROUND
               }
 
-              fun configure(unit: Float, nw: Float, nh: Float, sb: Float, pw: Float) {
+              // ------------------------------------------------------------ geometry
+
+              fun configure(unit: Float, nw: Float, nh: Float, pw: Float) {
                   u = unit
                   collapsedW = nw
                   collapsedH = nh
-                  statusH = sb
                   panelW = pw
                   val s = state
                   if (s != null) {
@@ -1493,115 +1948,209 @@ jobs:
 
               private fun isPanel(s: UiState): Boolean = s.kind != Kind.IDLE && s.kind != Kind.PILL
 
+              private fun viewportH(s: UiState): Float = min(s.rows.size.toFloat(), 4.5f) * ROW * u
+
               private fun panelH(s: UiState): Float = when (s.kind) {
                   Kind.PANEL_NOTIF -> 58f * u
                   Kind.PANEL_CALL -> 96f * u
-                  Kind.PANEL_MUSIC -> 124f * u
-                  Kind.PANEL_LIST, Kind.PANEL_NOTIFS -> (24f + 36f * max(1, s.rows.size)) * u
-                  Kind.PANEL_QUICK -> 134f * u
+                  Kind.PANEL_MUSIC -> 126f * u
+                  Kind.PANEL_LIST, Kind.PANEL_NOTIFS ->
+                      if (s.rows.isEmpty()) 66f * u else 18f * u + viewportH(s) + 8f * u
+                  Kind.PANEL_QUICK -> 124f * u
                   else -> 0f
+              }
+
+              private fun maxScroll(): Float {
+                  val s = state ?: return 0f
+                  if (s.kind != Kind.PANEL_NOTIFS && s.kind != Kind.PANEL_LIST) return 0f
+                  return max(0f, s.rows.size * ROW * u - viewportH(s))
               }
 
               private fun targetsFor(s: UiState) {
                   if (isPanel(s)) {
                       tgt[0] = collapsedW
-                      tgt[1] = statusH + 14f * u
-                      tgt[2] = panelH(s)
+                      tgt[1] = panelH(s)
+                      tgt[2] = panelW
                   } else {
                       tgt[0] = if (s.kind == Kind.PILL) collapsedW + 10f * u else collapsedW
-                      tgt[1] = collapsedH
-                      tgt[2] = 0f
+                      tgt[1] = 0f
+                      tgt[2] = collapsedW
                   }
               }
 
-              fun targetW(): Int {
-                  val s = state ?: return ceil(collapsedW).toInt()
-                  return ceil(if (isPanel(s)) panelW else tgt[0]).toInt()
+              fun smallW(): Int = ceil(collapsedW + 10f * u + 44f * u).toInt()
+              fun smallH(): Int = ceil(collapsedH + 24f * u).toInt()
+              fun bigW(): Int = ceil(panelW + 12f * u).toInt()
+              fun bigH(): Int = ceil(collapsedH + 200f * u + 12f * u).toInt()
+
+              fun tightW(s: UiState): Int = if (isPanel(s)) ceil(panelW + 8f * u).toInt() else smallW()
+              fun tightH(s: UiState): Int =
+                  if (isPanel(s)) ceil(collapsedH + panelH(s) + 8f * u).toInt() else smallH()
+
+              fun restW(): Int {
+                  val s = state ?: return smallW()
+                  return tightW(s)
               }
 
-              fun targetH(): Int {
-                  val s = state ?: return ceil(collapsedH).toInt()
-                  if (isPanel(s)) return ceil(statusH + tgt[2]).toInt()
-                  val dots = if (s.dots > 1) 16f * u else 0f
-                  return ceil(tgt[1] + dots).toInt()
+              fun restH(): Int {
+                  val s = state ?: return smallH()
+                  return tightH(s)
               }
 
               private fun keyOf(s: UiState): Int {
-                  return s.kind.ordinal * 10000 + (s.left?.type ?: 9) * 100 + (s.right?.type ?: 9) * 10 + min(s.rows.size, 9)
+                  return s.kind.ordinal * 10000 + (s.left?.type ?: 9) * 100 + (s.right?.type ?: 9) * 10
               }
 
               private fun needsAnim(s: UiState): Boolean {
                   return s.left?.type == Mini.BARS || s.right?.type == Mini.BARS || s.left?.type == Mini.ALARM
               }
 
-              fun setState(s: UiState): Boolean {
+              // --------------------------------------------------------------- state
+
+              fun hold(w: Int, h: Int) {
+                  holding = true
+                  holdW = w
+                  holdH = h
+                  removeCallbacks(releaseRun)
+                  postDelayed(releaseRun, 140L)
+              }
+
+              private val releaseRun = Runnable { release() }
+
+              private fun release() {
+                  if (holding) {
+                      holding = false
+                      removeCallbacks(releaseRun)
+                      if (pendingStart) {
+                          pendingStart = false
+                          startLoop()
+                      }
+                  }
+              }
+
+              override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+                  super.onSizeChanged(w, h, ow, oh)
+                  if (holding && w >= holdW && h >= holdH) {
+                      postOnAnimation { release() }
+                  }
+              }
+
+              fun nudge(dir: Int) {
+                  slide = dir * 16f * u
+                  startLoop()
+              }
+
+              fun setState(s: UiState) {
                   val first = state == null
-                  val oldW = targetW()
-                  val oldH = targetH()
                   state = s
                   targetsFor(s)
+                  val ms = maxScroll()
+                  if (scrollY > ms) scrollY = ms
                   if (first) {
                       for (i in 0..2) {
                           cur[i] = tgt[i]
                           vel[i] = 0f
                       }
+                      cur[3] = 0f
                   }
                   val k = keyOf(s)
                   if (k != modeKey) {
                       modeKey = k
                       if (!first) {
                           contentAlpha = 0f
-                          contentDelay = 0.12f
+                          contentDelay = 0.05f
+                          scrollY = 0f
+                          flingV = 0f
                       }
                   }
                   startLoop()
                   startBars()
                   invalidate()
-                  return first || oldW != targetW() || oldH != targetH()
               }
 
+              // ----------------------------------------------------------- animation
+
               private fun startLoop() {
+                  if (holding) {
+                      pendingStart = true
+                      return
+                  }
                   if (!running) {
                       running = true
-                      lastNs = System.nanoTime()
-                      postOnAnimation(tick)
+                      lastFrame = 0L
+                      Choreographer.getInstance().postFrameCallback(frame)
                   }
               }
 
-              private val tick = object : Runnable {
-                  override fun run() {
-                      val now = System.nanoTime()
-                      var dt = (now - lastNs) / 1_000_000_000f
-                      lastNs = now
-                      if (dt > 0.033f) dt = 0.033f
+              private val frame = object : Choreographer.FrameCallback {
+                  override fun doFrame(frameTimeNanos: Long) {
+                      if (lastFrame == 0L) {
+                          lastFrame = frameTimeNanos
+                          Choreographer.getInstance().postFrameCallback(this)
+                          return
+                      }
+                      var dt = (frameTimeNanos - lastFrame) / 1_000_000_000f
+                      lastFrame = frameTimeNanos
+                      if (dt > 0.05f) dt = 0.05f
+                      if (dt < 0.001f) dt = 0.001f
+
                       var moving = false
-                      val sub = 2
-                      val step = dt / sub
-                      for (i in 0..2) {
+                      val sub = 4
+                      val h = dt / sub
+                      for (i in 0..3) {
                           for (n in 0 until sub) {
                               val a = springK * (tgt[i] - cur[i]) - springC * vel[i]
-                              vel[i] += a * step
-                              cur[i] += vel[i] * step
+                              vel[i] += a * h
+                              cur[i] += vel[i] * h
                           }
-                          if (abs(vel[i]) > 1f || abs(tgt[i] - cur[i]) > 0.4f) {
+                          val eps = if (i == 3) 0.003f else 0.35f
+                          val epsV = if (i == 3) 0.02f else 1f
+                          if (abs(vel[i]) > epsV || abs(tgt[i] - cur[i]) > eps) {
                               moving = true
                           } else {
                               cur[i] = tgt[i]
                               vel[i] = 0f
                           }
                       }
+
+                      if (abs(flingV) > 25f) {
+                          scrollY += flingV * dt
+                          val ms = maxScroll()
+                          if (scrollY < 0f) {
+                              scrollY = 0f
+                              flingV = 0f
+                          } else if (scrollY > ms) {
+                              scrollY = ms
+                              flingV = 0f
+                          } else {
+                              flingV *= exp(-dt * 3.2f)
+                          }
+                          moving = true
+                      } else {
+                          flingV = 0f
+                      }
+
+                      if (abs(slide) > 0.4f) {
+                          slide *= exp(-dt * 11f)
+                          moving = true
+                      } else {
+                          slide = 0f
+                      }
+
                       if (contentDelay > 0f) {
                           contentDelay -= dt
                           moving = true
                       } else if (contentAlpha < 1f) {
-                          contentAlpha = min(1f, contentAlpha + dt / 0.22f)
+                          contentAlpha = min(1f, contentAlpha + dt / 0.2f)
                           moving = true
                       }
+
                       invalidate()
                       if (moving) {
-                          postOnAnimation(this)
+                          Choreographer.getInstance().postFrameCallback(this)
                       } else {
                           running = false
+                          lastFrame = 0L
                           host.onSettled()
                       }
                   }
@@ -1628,46 +2177,65 @@ jobs:
               }
 
               override fun onDetachedFromWindow() {
-                  removeCallbacks(tick)
+                  Choreographer.getInstance().removeFrameCallback(frame)
                   removeCallbacks(barsRun)
                   removeCallbacks(longRun)
+                  removeCallbacks(releaseRun)
                   running = false
                   barsRunning = false
+                  holding = false
                   super.onDetachedFromWindow()
               }
 
-              // ---------------------------------------------------------------- drawing
+              // ------------------------------------------------------------- drawing
+
+              private fun alphaFor(s: UiState): Float {
+                  var a = contentAlpha
+                  if (isPanel(s)) {
+                      val t = tgt[1]
+                      val p = if (t > 0f) max(0f, min(1f, cur[1] / t)) else 1f
+                      val g = max(0f, min(1f, (p - 0.5f) / 0.4f))
+                      a = min(a, g)
+                  }
+                  return a
+              }
 
               override fun onDraw(c: Canvas) {
                   val s = state ?: return
                   hits.clear()
+                  listClip.setEmpty()
                   val cx = width / 2f
+                  val py = collapsedH
                   val nw = max(0f, cur[0])
-                  val nh = max(0f, cur[1])
-                  val ph = max(0f, cur[2])
-                  val py = statusH
+                  val ph = max(0f, cur[1])
+                  val pw = max(nw, cur[2])
 
                   val outer = c.save()
+                  if (ph < 1f && cur[3] > 0.001f) {
+                      val sc = 1f + 0.04f * cur[3]
+                      c.scale(sc, sc, cx, 0f)
+                  }
                   if (s.left?.type == Mini.ALARM) {
                       val t = System.currentTimeMillis() / 1000f
                       c.translate(sin(t * 38f) * 1.4f * u, 0f)
                   }
 
                   fill.color = Color.BLACK
+                  val neckH = if (ph > 0.5f) py + min(ph, 14f * u) else py
                   val nl = cx - nw / 2f
                   val nr = cx + nw / 2f
-                  val r = min(nh / 2f, 14f * u)
-                  rect.set(nl, -nh, nr, nh)
+                  val r = min(14f * u, neckH / 2f)
+                  rect.set(nl, -neckH, nr, neckH)
                   c.drawRoundRect(rect, r, r, fill)
 
-                  if (ph > 1f) {
-                      val pl = cx - panelW / 2f
-                      val pr = cx + panelW / 2f
-                      val rp = min(22f * u, ph / 2f)
+                  if (ph > 0.5f) {
+                      val pl = cx - pw / 2f
+                      val pr = cx + pw / 2f
+                      val rp = min(22f * u, min(ph / 2f, pw / 2f))
                       rect.set(pl, py, pr, py + ph)
                       c.drawRoundRect(rect, rp, rp, fill)
 
-                      val f = min(20f * u, ph / 2.2f)
+                      val f = min(20f * u, min(ph / 2.2f, (pw - nw) / 2f - 0.5f))
                       if (f > 1f) {
                           path.reset()
                           path.moveTo(nl - f, py)
@@ -1689,12 +2257,17 @@ jobs:
                       }
                   }
 
-                  if (s.kind != Kind.IDLE) {
-                      val a = (255f * contentAlpha).toInt()
-                      val layer = c.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), max(0, min(255, a)))
-                      c.translate(0f, (contentAlpha - 1f) * 8f * u)
+                  val a = alphaFor(s)
+                  if (s.kind != Kind.IDLE && a > 0.01f) {
+                      var layer = -1
+                      if (a < 0.995f) {
+                          layer = c.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), (255f * a).roundToInt())
+                      }
+                      val sv = c.save()
+                      if (s.kind == Kind.PILL) c.translate(slide, 0f)
                       drawContent(c, s, cx)
-                      c.restoreToCount(layer)
+                      c.restoreToCount(sv)
+                      if (layer >= 0) c.restoreToCount(layer)
                   }
                   c.restoreToCount(outer)
               }
@@ -1837,7 +2410,7 @@ jobs:
 
               private fun drawPill(c: Canvas, s: UiState, cx: Float) {
                   val w = tgt[0]
-                  val cy = tgt[1] / 2f
+                  val cy = collapsedH / 2f
                   val l = s.left
                   val r = s.right
                   if (l != null) drawMini(c, l, cx - w / 2f + 15f * u, cy, 0f)
@@ -1846,7 +2419,7 @@ jobs:
                       for (i in 0 until s.dots) {
                           fill.color = Color.WHITE
                           fill.alpha = if (i == s.dotIdx) 255 else 100
-                          c.drawCircle(cx + (i - (s.dots - 1) / 2f) * 10f * u, tgt[1] + 8f * u, 2.5f * u, fill)
+                          c.drawCircle(cx + (i - (s.dots - 1) / 2f) * 10f * u, collapsedH + 9f * u, 2.6f * u, fill)
                       }
                       fill.alpha = 255
                   }
@@ -1854,37 +2427,37 @@ jobs:
 
               private fun drawNotif(c: Canvas, s: UiState, cx: Float) {
                   val x0 = cx - panelW / 2f
-                  val top = statusH
-                  avatar(c, s.bmp, s.color, s.title, x0 + 26f * u, top + 29f * u, 14f * u)
-                  text(c, s.title, x0 + 50f * u, top + 26f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 140f * u)
-                  text(c, s.sub, x0 + 50f * u, top + 43f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 70f * u)
-                  text(c, s.time, x0 + panelW - 18f * u, top + 26f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
+                  val top = collapsedH
+                  avatar(c, s.bmp, s.color, s.title, x0 + 28f * u, top + 30f * u, 14f * u)
+                  text(c, s.title, x0 + 52f * u, top + 27f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 140f * u)
+                  text(c, s.sub, x0 + 52f * u, top + 43f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 74f * u)
+                  text(c, s.time, x0 + panelW - 20f * u, top + 27f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
                   hits.add(Hit("notif", RectF(x0, top, x0 + panelW, top + panelH(s))))
               }
 
               private fun drawCall(c: Canvas, s: UiState, cx: Float) {
                   val x0 = cx - panelW / 2f
-                  val top = statusH
-                  avatar(c, null, Color.parseColor("#7F77DD"), s.title, x0 + 26f * u, top + 30f * u, 16f * u)
-                  text(c, s.title, x0 + 52f * u, top + 28f * u, 14f, Color.WHITE, true, Paint.Align.LEFT, panelW - 70f * u)
-                  text(c, "Panggilan masuk", x0 + 52f * u, top + 44f * u, 11f, C_GRAY)
-                  button(c, "Tolak", C_RED, x0 + 16f * u, top + 62f * u, x0 + 156f * u, top + 88f * u, "decline")
-                  button(c, "Angkat", C_GREEN, x0 + 168f * u, top + 62f * u, x0 + 308f * u, top + 88f * u, "answer")
+                  val top = collapsedH
+                  avatar(c, null, Color.parseColor("#7F77DD"), s.title, x0 + 28f * u, top + 30f * u, 16f * u)
+                  text(c, s.title, x0 + 54f * u, top + 28f * u, 14f, Color.WHITE, true, Paint.Align.LEFT, panelW - 74f * u)
+                  text(c, "Panggilan masuk", x0 + 54f * u, top + 44f * u, 11f, C_GRAY)
+                  button(c, "Tolak", C_RED, x0 + 18f * u, top + 60f * u, x0 + 158f * u, top + 86f * u, "decline")
+                  button(c, "Angkat", C_GREEN, x0 + 166f * u, top + 60f * u, x0 + 306f * u, top + 86f * u, "answer")
               }
 
               private fun drawMusic(c: Canvas, s: UiState, cx: Float) {
                   val x0 = cx - panelW / 2f
-                  val top = statusH
+                  val top = collapsedH
                   val b = s.bmp
                   if (b != null) {
-                      drawBmp(c, b, x0 + 18f * u, top + 22f * u, x0 + 58f * u, top + 62f * u, 8f * u)
+                      drawBmp(c, b, x0 + 18f * u, top + 20f * u, x0 + 58f * u, top + 60f * u, 8f * u)
                   } else {
                       fill.color = s.color
-                      rect.set(x0 + 18f * u, top + 22f * u, x0 + 58f * u, top + 62f * u)
+                      rect.set(x0 + 18f * u, top + 20f * u, x0 + 58f * u, top + 60f * u)
                       c.drawRoundRect(rect, 8f * u, 8f * u, fill)
                   }
-                  text(c, s.title, x0 + 68f * u, top + 38f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 90f * u)
-                  text(c, s.sub, x0 + 68f * u, top + 54f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 90f * u)
+                  text(c, s.title, x0 + 68f * u, top + 37f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 90f * u)
+                  text(c, s.sub, x0 + 68f * u, top + 53f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 90f * u)
 
                   val tl = x0 + 18f * u
                   val tw = panelW - 36f * u
@@ -1895,8 +2468,8 @@ jobs:
                   rect.set(tl, top + 72f * u, tl + tw * max(0f, min(1f, s.progress)), top + 76f * u)
                   c.drawRoundRect(rect, 2f * u, 2f * u, fill)
                   hits.add(Hit("seek", RectF(tl, top + 62f * u, tl + tw, top + 86f * u), tl, tw))
-                  text(c, s.posText, tl, top + 92f * u, 11f, C_GRAY)
-                  text(c, s.durText, tl + tw, top + 92f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
+                  text(c, s.posText, tl, top + 91f * u, 11f, C_GRAY)
+                  text(c, s.durText, tl + tw, top + 91f * u, 11f, C_GRAY, false, Paint.Align.RIGHT)
 
                   val cy = top + 108f * u
                   fill.color = Color.WHITE
@@ -1941,95 +2514,109 @@ jobs:
 
               private fun drawRows(c: Canvas, s: UiState, cx: Float, empty: String) {
                   val x0 = cx - panelW / 2f
-                  val top = statusH
+                  val top = collapsedH
                   if (s.rows.isEmpty()) {
-                      text(c, empty, cx, top + 52f * u, 12f, C_GRAY, false, Paint.Align.CENTER)
+                      text(c, empty, cx, top + 42f * u, 12f, C_GRAY, false, Paint.Align.CENTER)
                       return
                   }
+                  val vp = viewportH(s)
+                  val clipT = top + 18f * u
+                  val clipB = clipT + vp
+                  listClip.set(x0, clipT, x0 + panelW, clipB)
+                  val sv = c.save()
+                  c.clipRect(x0, clipT, x0 + panelW, clipB)
                   for (i in s.rows.indices) {
                       val row = s.rows[i]
-                      val rt = top + 22f * u + i * 36f * u
+                      val rt = clipT + i * ROW * u - scrollY
+                      if (rt > clipB || rt + ROW * u < clipT) continue
                       if (i > 0) {
                           fill.color = C_DARK
-                          rect.set(x0 + 18f * u, rt - 2f * u, x0 + panelW - 18f * u, rt - 1f * u)
+                          rect.set(x0 + 18f * u, rt, x0 + panelW - 18f * u, rt + 1f * u)
                           c.drawRect(rect, fill)
                       }
-                      avatar(c, row.bmp, row.color, row.title, x0 + 30f * u, rt + 15f * u, 12f * u)
+                      avatar(c, row.bmp, row.color, row.title, x0 + 32f * u, rt + 18f * u, 12f * u)
                       val rightW = if (row.right.isNotEmpty()) 64f * u else 0f
-                      text(c, row.title, x0 + 50f * u, rt + 13f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 68f * u - rightW)
-                      text(c, row.sub, x0 + 50f * u, rt + 28f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 68f * u - rightW)
+                      text(c, row.title, x0 + 52f * u, rt + 16f * u, 13f, Color.WHITE, true, Paint.Align.LEFT, panelW - 72f * u - rightW)
+                      text(c, row.sub, x0 + 52f * u, rt + 31f * u, 11f, C_GRAY, false, Paint.Align.LEFT, panelW - 72f * u - rightW)
                       if (row.right.isNotEmpty()) {
-                          text(c, row.right, x0 + panelW - 18f * u, rt + 20f * u, 14f, C_ORANGE, true, Paint.Align.RIGHT)
+                          text(c, row.right, x0 + panelW - 20f * u, rt + 23f * u, 14f, C_ORANGE, true, Paint.Align.RIGHT)
                       }
-                      hits.add(Hit(row.id, RectF(x0, rt - 2f * u, x0 + panelW, rt + 34f * u)))
+                      hits.add(Hit(row.id, RectF(x0, rt, x0 + panelW, rt + ROW * u), 0f, 0f, true))
+                  }
+                  c.restoreToCount(sv)
+                  val ms = maxScroll()
+                  if (ms > 0f) {
+                      val trackH = vp - 8f * u
+                      val barH = max(16f * u, trackH * vp / (s.rows.size * ROW * u))
+                      val by = clipT + 4f * u + (trackH - barH) * (scrollY / ms)
+                      fill.color = C_TRACK
+                      rect.set(x0 + panelW - 8f * u, by, x0 + panelW - 6f * u, by + barH)
+                      c.drawRoundRect(rect, 1f * u, 1f * u, fill)
                   }
               }
 
               private fun drawQuick(c: Canvas, s: UiState, cx: Float) {
                   val x0 = cx - panelW / 2f
-                  val top = statusH
-                  val labels = arrayOf("Wifi", "Data", "Senter", "Bluetooth")
-                  val ids = arrayOf("wifi", "data", "torch", "bt")
-                  for (i in 0..3) {
-                      val tx = cx + (i - 1.5f) * 79f * u
-                      val on = s.tiles[i]
-                      fill.color = if (on) C_BLUE else C_DARK
-                      rect.set(tx - 25f * u, top + 22f * u, tx + 25f * u, top + 72f * u)
-                      c.drawRoundRect(rect, 15f * u, 15f * u, fill)
-                      val col = if (on) Color.WHITE else C_GRAY
-                      val ty = top + 47f * u
-                      when (i) {
-                          0 -> {
-                              stroke.color = col
-                              stroke.strokeWidth = 2f * u
-                              val wy = ty + 8f * u
-                              val radii = floatArrayOf(6f, 11f, 16f)
-                              for (rr in radii) {
-                                  rect.set(tx - rr * u, wy - rr * u, tx + rr * u, wy + rr * u)
-                                  c.drawArc(rect, 225f, 90f, false, stroke)
-                              }
-                              fill.color = col
-                              c.drawCircle(tx, wy, 2f * u, fill)
-                          }
-                          1 -> {
-                              fill.color = col
-                              for (k in 0..3) {
-                                  val bh = (5f + 4f * k) * u
-                                  val bx = tx - 11f * u + k * 6f * u
-                                  rect.set(bx, ty + 8f * u - bh, bx + 4f * u, ty + 8f * u)
-                                  c.drawRoundRect(rect, 1f * u, 1f * u, fill)
-                              }
-                          }
-                          2 -> {
-                              stroke.color = col
-                              stroke.strokeWidth = 2f * u
-                              c.drawCircle(tx, ty - 3f * u, 6f * u, stroke)
-                              fill.color = col
-                              rect.set(tx - 3f * u, ty + 4f * u, tx + 3f * u, ty + 10f * u)
-                              c.drawRect(rect, fill)
-                          }
-                          else -> drawBt(c, tx, ty, 1.2f * u, col, 1.9f * u)
-                      }
-                      text(c, labels[i], tx, top + 86f * u, 11f, C_GRAY, false, Paint.Align.CENTER)
-                      hits.add(Hit(ids[i], RectF(tx - 28f * u, top + 20f * u, tx + 28f * u, top + 92f * u)))
-                  }
-                  text(c, "Volume", x0 + 18f * u, top + 104f * u, 11f, C_GRAY)
+                  val top = collapsedH
+
+                  val bt = top + 20f * u
+                  val bb = top + 64f * u
+
+                  // Senter
+                  val tl1 = x0 + 18f * u
+                  val tr1 = x0 + 158f * u
+                  fill.color = if (s.torch) C_AMBER else C_DARK
+                  rect.set(tl1, bt, tr1, bb)
+                  c.drawRoundRect(rect, 18f * u, 18f * u, fill)
+                  val fg = if (s.torch) Color.parseColor("#2B2100") else Color.WHITE
+                  val my = (bt + bb) / 2f
+                  stroke.color = fg
+                  stroke.strokeWidth = 2f * u
+                  c.drawCircle(tl1 + 26f * u, my - 3f * u, 6.5f * u, stroke)
+                  fill.color = fg
+                  rect.set(tl1 + 23f * u, my + 4f * u, tl1 + 29f * u, my + 10f * u)
+                  c.drawRect(rect, fill)
+                  text(c, "Senter", tl1 + 44f * u, my + 4.5f * u, 13f, fg, true)
+                  hits.add(Hit("torch", RectF(tl1, bt, tr1, bb)))
+
+                  // Matikan HP
+                  val tl2 = x0 + 166f * u
+                  val tr2 = x0 + 306f * u
+                  fill.color = C_RED_DARK
+                  rect.set(tl2, bt, tr2, bb)
+                  c.drawRoundRect(rect, 18f * u, 18f * u, fill)
+                  stroke.color = C_RED_TEXT
+                  stroke.strokeWidth = 2f * u
+                  val pcx = tl2 + 26f * u
+                  rect.set(pcx - 8f * u, my - 8f * u, pcx + 8f * u, my + 8f * u)
+                  c.drawArc(rect, -60f, 300f, false, stroke)
+                  c.drawLine(pcx, my - 10f * u, pcx, my - 1f * u, stroke)
+                  text(c, "Matikan HP", tl2 + 44f * u, my + 4.5f * u, 13f, C_RED_TEXT, true)
+                  hits.add(Hit("power", RectF(tl2, bt, tr2, bb)))
+
+                  // Volume
                   val tl = x0 + 18f * u
                   val tw = panelW - 36f * u
+                  text(c, "Volume", tl, top + 86f * u, 11f, C_GRAY)
+                  val pct = (max(0f, min(1f, s.volume)) * 100f).roundToInt()
+                  text(c, pct.toString() + "%", tl + tw, top + 86f * u, 11f, Color.WHITE, true, Paint.Align.RIGHT)
                   fill.color = C_TRACK
-                  rect.set(tl, top + 112f * u, tl + tw, top + 120f * u)
-                  c.drawRoundRect(rect, 4f * u, 4f * u, fill)
+                  rect.set(tl, top + 96f * u, tl + tw, top + 106f * u)
+                  c.drawRoundRect(rect, 5f * u, 5f * u, fill)
+                  val fx = tl + tw * max(0f, min(1f, s.volume))
                   fill.color = Color.WHITE
-                  rect.set(tl, top + 112f * u, tl + tw * max(0f, min(1f, s.volume)), top + 120f * u)
-                  c.drawRoundRect(rect, 4f * u, 4f * u, fill)
-                  hits.add(Hit("vol", RectF(tl - 8f * u, top + 104f * u, tl + tw + 8f * u, top + 130f * u), tl, tw))
+                  rect.set(tl, top + 96f * u, max(tl + 10f * u, fx), top + 106f * u)
+                  c.drawRoundRect(rect, 5f * u, 5f * u, fill)
+                  hits.add(Hit("vol", RectF(tl - 8f * u, top + 88f * u, tl + tw + 8f * u, top + 116f * u), tl, tw))
               }
 
-              // ------------------------------------------------------------------ touch
+              // --------------------------------------------------------------- touch
 
               private fun hitAt(x: Float, y: Float): Hit? {
                   for (i in hits.indices.reversed()) {
-                      if (hits[i].r.contains(x, y)) return hits[i]
+                      val h = hits[i]
+                      if (h.scroll && !listClip.contains(x, y)) continue
+                      if (h.r.contains(x, y)) return h
                   }
                   return null
               }
@@ -2047,8 +2634,16 @@ jobs:
                   }
               }
 
+              private fun press(on: Boolean) {
+                  val s = state ?: return
+                  if (s.kind != Kind.IDLE && s.kind != Kind.PILL) return
+                  tgt[3] = if (on) 1f else 0f
+                  startLoop()
+              }
+
               private val longRun = Runnable {
                   longFired = true
+                  press(false)
                   performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                   host.onLongPress(downX < width / 2f)
               }
@@ -2056,34 +2651,59 @@ jobs:
               override fun onTouchEvent(e: MotionEvent): Boolean {
                   when (e.actionMasked) {
                       MotionEvent.ACTION_DOWN -> {
+                          parent?.requestDisallowInterceptTouchEvent(true)
                           host.onActive()
                           downX = e.x
                           downY = e.y
                           moved = false
                           longFired = false
+                          scrolling = false
+                          flingV = 0f
+                          startScroll = scrollY
+                          inList = listClip.contains(e.x, e.y) && maxScroll() > 0f
                           downHit = hitAt(e.x, e.y)
+                          tracker?.recycle()
+                          tracker = VelocityTracker.obtain()
+                          tracker?.addMovement(e)
                           val s = state
                           if (s != null && (s.kind == Kind.IDLE || s.kind == Kind.PILL)) {
+                              press(true)
                               postDelayed(longRun, 450L)
                           }
                           if (isSlider(downHit)) slider(e.x, false)
                       }
                       MotionEvent.ACTION_MOVE -> {
-                          if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) {
+                          tracker?.addMovement(e)
+                          val dy = e.y - downY
+                          if (abs(e.x - downX) > slop || abs(dy) > slop) {
                               moved = true
                               removeCallbacks(longRun)
+                              press(false)
+                          }
+                          if (inList && abs(dy) > slop) {
+                              scrolling = true
+                              host.onActive()
+                              val ms = maxScroll()
+                              scrollY = max(0f, min(ms, startScroll - dy))
+                              invalidate()
                           }
                           if (isSlider(downHit)) slider(e.x, false)
                       }
                       MotionEvent.ACTION_UP -> {
                           removeCallbacks(longRun)
-                          if (!longFired) {
+                          press(false)
+                          tracker?.addMovement(e)
+                          if (scrolling) {
+                              tracker?.computeCurrentVelocity(1000)
+                              flingV = -(tracker?.yVelocity ?: 0f)
+                              startLoop()
+                          } else if (!longFired) {
                               val dx = e.x - downX
                               val dy = e.y - downY
                               val hit = downHit
                               if (hit != null && isSlider(hit)) {
                                   slider(e.x, true)
-                              } else if (dy < -28f * u && abs(dy) > abs(dx)) {
+                              } else if (dy < -28f * u && abs(dy) > abs(dx) && !inList) {
                                   host.onClose()
                               } else if (abs(dx) > 28f * u && abs(dx) > abs(dy)) {
                                   host.onSwipe(if (dx < 0f) 1 else -1)
@@ -2091,9 +2711,14 @@ jobs:
                                   if (hit != null) host.onAction(hit.id, 0f) else host.onTapEmpty()
                               }
                           }
+                          tracker?.recycle()
+                          tracker = null
                       }
                       MotionEvent.ACTION_CANCEL -> {
                           removeCallbacks(longRun)
+                          press(false)
+                          tracker?.recycle()
+                          tracker = null
                       }
                       else -> {
                       }
