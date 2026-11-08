@@ -105,6 +105,29 @@ jobs:
               <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
               <uses-permission android:name="android.permission.VIBRATE" />
               <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.DIAL" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.APP_MESSAGING" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.APP_BROWSER" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.media.action.IMAGE_CAPTURE" />
+                  </intent>
+              </queries>
 
               <application
                   android:allowBackup="true"
@@ -118,6 +141,20 @@ jobs:
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <activity
+                      android:name=".LauncherActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:stateNotNeeded="true"
+                      android:label="CamesNotch Launcher"
+                      android:theme="@android:style/Theme.Material.Wallpaper.NoTitleBar">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.HOME" />
+                          <category android:name="android.intent.category.DEFAULT" />
                       </intent-filter>
                   </activity>
 
@@ -650,6 +687,28 @@ jobs:
             return sw
            }
 
+
+           private val gestureRefresh = ArrayList<() -> Unit>()
+
+           private fun gestureRow(slot: String, title: String): View {
+            val names = Prefs.GESTURE_NAMES
+            val b = Button(this)
+            b.isAllCaps = false
+            val refresh: () -> Unit = {
+             b.text = title + ": " + names[Prefs.gesture(this, slot)]
+            }
+            refresh()
+            gestureRefresh.add(refresh)
+            b.setOnClickListener {
+             AlertDialog.Builder(this).setTitle(title).setItems(names) { _, which ->
+              Prefs.setGesture(this, slot, which)
+              NotchController.rebuild()
+              for (r in gestureRefresh) r()
+             }.show()
+            }
+            return b
+           }
+
            private fun featureRow(key: String, text: String, def: Boolean): Switch {
             return switchRow(text, Prefs.on(this, key, def)) { checked ->
              Prefs.setOn(this, key, checked)
@@ -877,10 +936,37 @@ jobs:
             root.addView(featureRow("bt", "Bluetooth tersambung dan terputus", true))
             root.addView(featureRow("ringer", "Mode senyap, getar, dan dering", true))
             root.addView(featureRow("info", "Info saat ketuk notch kosong", true))
-            root.addView(featureRow("left", "Tekan lama kiri: notifikasi", true))
-            root.addView(featureRow("right", "Tekan lama kanan: pengaturan cepat", true))
-            root.addView(featureRow("text", "Geser bawah: teks baca", true))
+            root.addView(featureRow("left", "Daftar notifikasi aktif", true))
+            root.addView(featureRow("right", "Pengaturan cepat aktif", true))
+            root.addView(featureRow("text", "Teks baca aktif", true))
+            root.addView(label("Atur gestur (kalau bentrok, otomatis bertukar)", 14f, true, Color.parseColor("#222222")))
+            gestureRefresh.clear()
+            root.addView(gestureRow("gl", "Tekan lama kiri"))
+            root.addView(gestureRow("gr", "Tekan lama kanan"))
+            root.addView(gestureRow("gd", "Geser bawah"))
             root.addView(featureRow("qr", "Pindai QR dan WiFi di kamera", true))
+            root.addView(featureRow("topbar", "Top bar buatan (menutupi bar sistem)", false))
+            root.addView(label("Launcher", 16f, true, dark))
+            root.addView(button("Jadikan CamesNotch launcher bawaan") {
+             try {
+              startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+             } catch (e: Exception) {
+              Toast.makeText(this, "Tidak bisa membuka pengaturan.", Toast.LENGTH_SHORT).show()
+             }
+            })
+            root.addView(button("Buka launcher") {
+             startActivity(Intent(this, LauncherActivity::class.java))
+            })
+            val iconBtn = Button(this)
+            iconBtn.isAllCaps = false
+            iconBtn.text = "Gaya ikon: " + Prefs.ICON_NAMES[Prefs.iconMode(this)]
+            iconBtn.setOnClickListener {
+             AlertDialog.Builder(this).setTitle("Gaya ikon").setItems(Prefs.ICON_NAMES) { _, which ->
+              Prefs.setIconMode(this, which)
+              iconBtn.text = "Gaya ikon: " + Prefs.ICON_NAMES[which]
+             }.show()
+            }
+            root.addView(iconBtn)
 
             root.addView(label("Pengaturan", 16f, true, dark))
             root.addView(switchRow("Notch aktif", Prefs.enabled(this)) { checked ->
@@ -1330,8 +1416,9 @@ jobs:
             removeView()
             if (!Prefs.enabled(s)) return
             val dm = s.resources.displayMetrics
-            if (dm.widthPixels > dm.heightPixels) return
-            val u = dm.widthPixels / 360f
+            val tablet = s.resources.configuration.smallestScreenWidthDp >= 600
+            if (dm.widthPixels > dm.heightPixels && !tablet) return
+            val u = if (tablet) dm.density else dm.widthPixels / 360f
 
             var cutB = 0f
             var cutW = 0f
@@ -1399,6 +1486,7 @@ jobs:
             }
 
             val tv = TouchView(s, v)
+            TopBar.show(s)
             try {
              wm?.addView(v, dl)
              wm?.addView(tv, tl)
@@ -1417,6 +1505,7 @@ jobs:
            }
 
            private fun removeView() {
+            TopBar.hide()
             h.removeCallbacks(tickRun)
             h.removeCallbacks(collapseRun)
             h.removeCallbacks(clearTransRun)
@@ -2322,10 +2411,9 @@ jobs:
 
            private fun singleTap() {
             val a = acts()
-            if (a.size >= 2) {
-             setExp(Exp.ACTS)
-            } else if (a.size == 1) {
-             if (a[0].type == 0) setExp(Exp.MUSIC) else setExp(Exp.TIMER)
+            if (a.isNotEmpty()) {
+             val cur = a[Math.floorMod(actIdx, a.size)]
+             if (cur.type == 0) setExp(Exp.MUSIC) else setExp(Exp.TIMER)
             } else {
              val c = a11y
              if (c == null || Prefs.on(c, "info")) setExp(Exp.INFO)
@@ -2357,20 +2445,26 @@ jobs:
             }
            }
 
+           private fun openFeature(c: Context, f: Int) {
+            if (f == 0) {
+             if (Prefs.on(c, "left")) setExp(Exp.NOTIFS)
+            } else if (f == 1) {
+             if (Prefs.on(c, "right")) setExp(Exp.QUICK)
+            } else {
+             if (Prefs.on(c, "text")) setExp(Exp.TEXT)
+            }
+           }
+
            override fun onLongPress(left: Boolean) {
             if (exp != Exp.NONE) return
             val c = a11y ?: return
-            if (left) {
-             if (Prefs.on(c, "left")) setExp(Exp.NOTIFS)
-            } else {
-             if (Prefs.on(c, "right")) setExp(Exp.QUICK)
-            }
+            openFeature(c, Prefs.gesture(c, if (left) "gl" else "gr"))
            }
 
            override fun onSwipeDown() {
             if (exp != Exp.NONE || trans != null || call != null) return
             val c = a11y ?: return
-            if (Prefs.on(c, "text")) setExp(Exp.TEXT)
+            openFeature(c, Prefs.gesture(c, "gd"))
            }
 
            override fun onSwipe(dir: Int) {
@@ -4252,7 +4346,7 @@ jobs:
            }
 
            const val DEFAULT_NOTE = "Halo semuanya, selamat datang di videoku. Teks ini bisa kamu ganti di pengaturan " +
-             "CamesNotch, bagian Teks baca. Geser notch ke bawah untuk membukanya, lalu tekan tombol putar " +
+             "CamesNotch, bagian Teks baca. Buka lewat gestur Teks baca (atur di pengaturan), lalu tekan tombol putar " +
              "supaya teks bergulir sendiri sementara kamu tetap menatap kamera."
 
            fun on(c: Context, key: String, def: Boolean = true): Boolean = sp(c).getBoolean("f_" + key, def)
@@ -4281,6 +4375,828 @@ jobs:
 
            fun setTextSpeed(c: Context, v: Int) {
             sp(c).edit().putInt("ts", v).apply()
+           }
+
+           val GESTURE_NAMES: Array<String> = arrayOf("Daftar notifikasi", "Pengaturan cepat", "Teks baca")
+
+           private val GESTURE_SLOTS: Array<String> = arrayOf("gl", "gr", "gd")
+
+           fun gesture(c: Context, slot: String): Int {
+            val def = when (slot) {
+             "gl" -> 0
+             "gr" -> 1
+             else -> 2
+            }
+            return sp(c).getInt("g_" + slot, def)
+           }
+
+           fun setGesture(c: Context, slot: String, v: Int) {
+            val old = gesture(c, slot)
+            val e = sp(c).edit()
+            for (o in GESTURE_SLOTS) {
+             if (o != slot && gesture(c, o) == v) e.putInt("g_" + o, old)
+            }
+            e.putInt("g_" + slot, v)
+            e.apply()
+           }
+
+           val ICON_NAMES: Array<String> = arrayOf("Kaca bening", "Kaca berwarna (otomatis)", "Satu warna (seperti Vivo)")
+
+           fun iconMode(c: Context): Int = sp(c).getInt("icm", 1)
+
+           fun setIconMode(c: Context, v: Int) {
+            sp(c).edit().putInt("icm", v).apply()
+           }
+          }
+          CAMES_EOF
+          cat > 'app/src/main/java/id/cames/notch/GlassIcons.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.LinearGradient
+          import android.graphics.Paint
+          import android.graphics.Path
+          import android.graphics.PorterDuff
+          import android.graphics.PorterDuffColorFilter
+          import android.graphics.PorterDuffXfermode
+          import android.graphics.RectF
+          import android.graphics.Shader
+          import android.graphics.drawable.AdaptiveIconDrawable
+          import android.graphics.drawable.Drawable
+          import android.os.Build
+
+          object GlassIcons {
+
+           const val CLEAR = 0
+           const val COLOR = 1
+           const val SOLID = 2
+
+           fun avgColor(d: Drawable): Int {
+            val n = 12
+            val b = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+            val c = Canvas(b)
+            d.setBounds(0, 0, n, n)
+            d.draw(c)
+            val px = IntArray(n * n)
+            b.getPixels(px, 0, n, 0, 0, n, n)
+            b.recycle()
+            val hsv = FloatArray(3)
+            var r = 0f
+            var g = 0f
+            var bl = 0f
+            var w = 0f
+            for (p in px) {
+             val a = Color.alpha(p)
+             if (a < 40) continue
+             Color.colorToHSV(p, hsv)
+             val wt = (a / 255f) * (0.2f + hsv[1])
+             r += Color.red(p) * wt
+             g += Color.green(p) * wt
+             bl += Color.blue(p) * wt
+             w += wt
+            }
+            if (w <= 0f) return Color.rgb(150, 160, 185)
+            return Color.rgb((r / w).toInt(), (g / w).toInt(), (bl / w).toInt())
+           }
+
+           private fun vivid(color: Int): Int {
+            val h = FloatArray(3)
+            Color.colorToHSV(color, h)
+            if (h[1] > 0.12f) h[1] = Math.min(1f, h[1] * 1.15f)
+            h[2] = Math.max(0.55f, Math.min(0.95f, h[2]))
+            return Color.HSVToColor(h)
+           }
+
+           private fun lighten(c: Int, t: Float): Int {
+            val r = Color.red(c) + ((255 - Color.red(c)) * t).toInt()
+            val g = Color.green(c) + ((255 - Color.green(c)) * t).toInt()
+            val b = Color.blue(c) + ((255 - Color.blue(c)) * t).toInt()
+            return Color.rgb(r, g, b)
+           }
+
+           private fun darken(c: Int, t: Float): Int {
+            val r = (Color.red(c) * (1f - t)).toInt()
+            val g = (Color.green(c) * (1f - t)).toInt()
+            val b = (Color.blue(c) * (1f - t)).toInt()
+            return Color.rgb(r, g, b)
+           }
+
+           private fun alpha(c: Int, a: Int): Int = Color.argb(a, Color.red(c), Color.green(c), Color.blue(c))
+
+           fun render(d: Drawable, mode: Int, s: Int): Bitmap {
+            val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+            val c = Canvas(out)
+            val pad = s * 0.07f
+            val rect = RectF(pad, pad * 0.7f, s - pad, s - pad * 1.3f)
+            val rad = rect.width() * 0.28f
+            val path = Path()
+            path.addRoundRect(rect, rad, rad, Path.Direction.CW)
+
+            val tint = vivid(avgColor(d))
+
+            var glyph: Drawable = d
+            var big = false
+            if (d is AdaptiveIconDrawable) {
+             val f: Drawable? = d.foreground
+             if (f != null) {
+              glyph = f
+              big = true
+             }
+             if (mode == SOLID && Build.VERSION.SDK_INT >= 33) {
+              val mono: Drawable? = d.monochrome
+              if (mono != null) {
+               glyph = mono
+               big = true
+              }
+             }
+            }
+
+            val shadow = Paint(Paint.ANTI_ALIAS_FLAG)
+            shadow.color = Color.BLACK
+            shadow.setShadowLayer(s * 0.05f, 0f, s * 0.03f, Color.argb(90, 0, 0, 0))
+            c.drawPath(path, shadow)
+            val clear = Paint(Paint.ANTI_ALIAS_FLAG)
+            clear.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            c.drawPath(path, clear)
+
+            val top: Int
+            val bot: Int
+            if (mode == SOLID) {
+             top = Color.rgb(228, 235, 255)
+             bot = Color.rgb(205, 216, 250)
+            } else if (mode == COLOR) {
+             top = alpha(lighten(tint, 0.30f), 215)
+             bot = alpha(darken(tint, 0.12f), 235)
+            } else {
+             top = alpha(lighten(tint, 0.55f), 120)
+             bot = alpha(tint, 70)
+            }
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+            fill.style = Paint.Style.FILL
+            fill.shader = LinearGradient(0f, rect.top, 0f, rect.bottom, top, bot, Shader.TileMode.CLAMP)
+            c.drawPath(path, fill)
+
+            c.save()
+            c.clipPath(path)
+            val scale = if (big) 1.38f else 0.74f
+            val half = rect.width() * scale / 2f
+            glyph.setBounds(
+             (rect.centerX() - half).toInt(),
+             (rect.centerY() - half).toInt(),
+             (rect.centerX() + half).toInt(),
+             (rect.centerY() + half).toInt()
+            )
+            if (mode == SOLID) {
+             glyph.colorFilter = PorterDuffColorFilter(Color.rgb(42, 47, 60), PorterDuff.Mode.SRC_IN)
+            } else {
+             glyph.colorFilter = null
+            }
+            glyph.draw(c)
+            glyph.colorFilter = null
+
+            val sheenH = rect.height() * 0.55f
+            val sheen = Paint(Paint.ANTI_ALIAS_FLAG)
+            sheen.shader = LinearGradient(
+             0f, rect.top, 0f, rect.top + sheenH,
+             Color.argb(120, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP
+            )
+            c.drawRect(rect.left, rect.top, rect.right, rect.top + sheenH, sheen)
+            val lowH = rect.height() * 0.3f
+            val low = Paint(Paint.ANTI_ALIAS_FLAG)
+            low.shader = LinearGradient(
+             0f, rect.bottom - lowH, 0f, rect.bottom,
+             Color.argb(0, 0, 0, 0), Color.argb(45, 0, 0, 0), Shader.TileMode.CLAMP
+            )
+            c.drawRect(rect.left, rect.bottom - lowH, rect.right, rect.bottom, low)
+            c.restore()
+
+            val rim = Paint(Paint.ANTI_ALIAS_FLAG)
+            rim.style = Paint.Style.STROKE
+            rim.strokeWidth = s * 0.022f
+            rim.shader = LinearGradient(
+             rect.left, rect.top, rect.right, rect.bottom,
+             intArrayOf(
+              Color.argb(210, 255, 255, 255),
+              Color.argb(25, 255, 255, 255),
+              Color.argb(140, 255, 255, 255)
+             ),
+             floatArrayOf(0f, 0.55f, 1f),
+             Shader.TileMode.CLAMP
+            )
+            val hw = rim.strokeWidth / 2f
+            val rr = RectF(rect.left + hw, rect.top + hw, rect.right - hw, rect.bottom - hw)
+            c.drawRoundRect(rr, rad - hw, rad - hw, rim)
+            return out
+           }
+          }
+          CAMES_EOF
+          cat > 'app/src/main/java/id/cames/notch/TopBar.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.accessibilityservice.AccessibilityService
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Paint
+          import android.graphics.PixelFormat
+          import android.graphics.RectF
+          import android.graphics.Typeface
+          import android.net.ConnectivityManager
+          import android.net.NetworkCapabilities
+          import android.os.BatteryManager
+          import android.os.Build
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.View
+          import android.view.WindowManager
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          object TopBar {
+
+           private var view: TopBarView? = null
+           private var wm: WindowManager? = null
+
+           fun show(s: AccessibilityService) {
+            hide()
+            if (!Prefs.on(s, "topbar", false)) return
+            val m = s.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val v = TopBarView(s)
+            val lp = WindowManager.LayoutParams(
+             WindowManager.LayoutParams.MATCH_PARENT,
+             v.barHeight(),
+             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+               WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+               WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+               WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+             PixelFormat.TRANSLUCENT
+            )
+            lp.gravity = Gravity.TOP
+            if (Build.VERSION.SDK_INT >= 28) {
+             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            try {
+             m.addView(v, lp)
+             view = v
+             wm = m
+             v.start()
+            } catch (e: Exception) {
+             view = null
+            }
+           }
+
+           fun hide() {
+            val v = view
+            if (v != null) {
+             v.stop()
+             try {
+              wm?.removeView(v)
+             } catch (e: Exception) {
+             }
+            }
+            view = null
+           }
+          }
+
+          class TopBarView(ctx: Context) : View(ctx) {
+
+           private val d = ctx.resources.displayMetrics.density
+           private val h = Handler(Looper.getMainLooper())
+           private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+           private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+           private var seenInset = false
+           private var pct = 100
+           private var charging = false
+           private var wifi = false
+           private var cell = false
+
+           private val tick = object : Runnable {
+            override fun run() {
+             refresh()
+             h.postDelayed(this, 5000L)
+            }
+           }
+
+           init {
+            setOnApplyWindowInsetsListener { _, ins ->
+             val t = ins.systemWindowInsetTop
+             if (t > 0) seenInset = true
+             visibility = if (seenInset && t == 0) View.INVISIBLE else View.VISIBLE
+             ins
+            }
+           }
+
+           fun barHeight(): Int {
+            val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+            return if (id > 0) resources.getDimensionPixelSize(id) else (24f * d).toInt()
+           }
+
+           fun start() {
+            h.post(tick)
+           }
+
+           fun stop() {
+            h.removeCallbacks(tick)
+           }
+
+           private fun refresh() {
+            val i = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            if (i != null) {
+             val lv = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+             val sc = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+             if (lv >= 0 && sc > 0) pct = lv * 100 / sc
+             val st = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+             charging = st == BatteryManager.BATTERY_STATUS_CHARGING || st == BatteryManager.BATTERY_STATUS_FULL
+            }
+            try {
+             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+             val cap = cm.getNetworkCapabilities(cm.activeNetwork)
+             wifi = cap != null && cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+             cell = cap != null && cap.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+            } catch (e: Exception) {
+            }
+            invalidate()
+           }
+
+           override fun onDraw(c: Canvas) {
+            c.drawColor(Color.BLACK)
+            val hh = height.toFloat()
+            p.reset()
+            p.isAntiAlias = true
+            p.style = Paint.Style.FILL
+            p.color = Color.WHITE
+            p.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            p.textSize = 14f * d
+            p.textAlign = Paint.Align.LEFT
+            val base = hh / 2f - (p.ascent() + p.descent()) / 2f
+            c.drawText(timeFmt.format(Date()), 18f * d, base, p)
+
+            var x = width - 16f * d
+            val bw = 24f * d
+            val bh = 12f * d
+            val top = hh / 2f - bh / 2f
+            val body = RectF(x - bw, top, x, top + bh)
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 1.2f * d
+            p.color = Color.argb(150, 255, 255, 255)
+            c.drawRoundRect(body, 3.5f * d, 3.5f * d, p)
+            p.style = Paint.Style.FILL
+            val inset = 2f * d
+            val fw = (bw - inset * 2f) * pct / 100f
+            val fillRect = RectF(body.left + inset, top + inset, body.left + inset + fw, top + bh - inset)
+            p.color = if (charging) Color.rgb(52, 211, 120) else if (pct <= 20) Color.rgb(255, 69, 58) else Color.WHITE
+            c.drawRoundRect(fillRect, 2f * d, 2f * d, p)
+            p.color = Color.argb(150, 255, 255, 255)
+            c.drawRoundRect(RectF(x + 1.2f * d, hh / 2f - 2.5f * d, x + 3f * d, hh / 2f + 2.5f * d), 1f * d, 1f * d, p)
+
+            x = body.left - 7f * d
+            p.color = Color.WHITE
+            p.textSize = 12f * d
+            p.textAlign = Paint.Align.RIGHT
+            val label = pct.toString() + "%"
+            c.drawText(label, x, base - 0.5f * d, p)
+            x -= p.measureText(label) + 10f * d
+
+            if (wifi) {
+             val cx = x - 8f * d
+             val cy = hh / 2f + 5f * d
+             p.style = Paint.Style.STROKE
+             p.strokeCap = Paint.Cap.ROUND
+             p.strokeWidth = 1.8f * d
+             p.color = Color.WHITE
+             val radii = floatArrayOf(4f * d, 8f * d, 12f * d)
+             for (r in radii) {
+              c.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), 225f, 90f, false, p)
+             }
+             p.style = Paint.Style.FILL
+             c.drawCircle(cx, cy, 1.6f * d, p)
+            } else if (cell) {
+             val bwid = 3f * d
+             val gap = 1.5f * d
+             val heights = floatArrayOf(4f * d, 7f * d, 10f * d, 13f * d)
+             val total = bwid * 4f + gap * 3f
+             var bx = x - total
+             val bottom = hh / 2f + 6.5f * d
+             p.style = Paint.Style.FILL
+             p.color = Color.WHITE
+             for (bhh in heights) {
+              c.drawRoundRect(RectF(bx, bottom - bhh, bx + bwid, bottom), 1f * d, 1f * d, p)
+              bx += bwid + gap
+             }
+            }
+           }
+          }
+          CAMES_EOF
+          cat > 'app/src/main/java/id/cames/notch/LauncherActivity.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.BroadcastReceiver
+          import android.content.ComponentName
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.graphics.Bitmap
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.MediaStore
+          import android.provider.Settings
+          import android.text.Editable
+          import android.text.TextWatcher
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.widget.BaseAdapter
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.GridView
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          class LauncherActivity : Activity() {
+
+           private class AppItem(
+            val label: String,
+            val comp: ComponentName,
+            val icon: Bitmap?,
+            val action: String?
+           )
+
+           private val letters = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+           private val handler = Handler(Looper.getMainLooper())
+           private var density = 1f
+           private var all: List<AppItem> = ArrayList()
+           private var shown: List<AppItem> = ArrayList()
+           private var loadedMode = -1
+           private var loading = false
+           private lateinit var col: LinearLayout
+           private lateinit var grid: GridView
+           private lateinit var search: EditText
+           private lateinit var clock: TextView
+           private lateinit var dateTv: TextView
+           private lateinit var dockBox: LinearLayout
+           private val adapter = AppAdapter()
+           private val clockFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+           private val dateFmt = SimpleDateFormat("EEEE, d MMMM", Locale("id", "ID"))
+
+           private val pkgReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+             load()
+            }
+           }
+
+           private val tick = object : Runnable {
+            override fun run() {
+             val now = Date()
+             clock.text = clockFmt.format(now)
+             dateTv.text = dateFmt.format(now)
+             handler.postDelayed(this, 10000L)
+            }
+           }
+
+           private fun dp(x: Int): Int = (x * density).toInt()
+
+           override fun onCreate(b: Bundle?) {
+            super.onCreate(b)
+            density = resources.displayMetrics.density
+            window.statusBarColor = Color.TRANSPARENT
+            window.navigationBarColor = Color.TRANSPARENT
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+              View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+              View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            buildUi()
+            val f = IntentFilter()
+            f.addAction(Intent.ACTION_PACKAGE_ADDED)
+            f.addAction(Intent.ACTION_PACKAGE_REMOVED)
+            f.addAction(Intent.ACTION_PACKAGE_CHANGED)
+            f.addDataScheme("package")
+            registerReceiver(pkgReceiver, f)
+            load()
+           }
+
+           override fun onResume() {
+            super.onResume()
+            handler.removeCallbacks(tick)
+            handler.post(tick)
+            if (loadedMode != Prefs.iconMode(this)) load()
+            if (search.text.isNotEmpty()) search.setText("")
+            grid.setSelection(0)
+           }
+
+           override fun onPause() {
+            super.onPause()
+            handler.removeCallbacks(tick)
+           }
+
+           override fun onDestroy() {
+            super.onDestroy()
+            try {
+             unregisterReceiver(pkgReceiver)
+            } catch (e: Exception) {
+            }
+           }
+
+           override fun onBackPressed() {
+            if (search.text.isNotEmpty()) search.setText("")
+           }
+
+           private fun buildUi() {
+            val root = FrameLayout(this)
+            root.background = GradientDrawable(
+             GradientDrawable.Orientation.TOP_BOTTOM,
+             intArrayOf(Color.argb(110, 0, 0, 0), Color.argb(40, 0, 0, 0), Color.argb(150, 0, 0, 0))
+            )
+
+            col = LinearLayout(this)
+            col.orientation = LinearLayout.VERTICAL
+            col.setPadding(dp(14), dp(34), dp(14), dp(16))
+
+            clock = TextView(this)
+            clock.textSize = 54f
+            clock.setTextColor(Color.WHITE)
+            clock.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            clock.setShadowLayer(8f, 0f, 2f, Color.argb(90, 0, 0, 0))
+            dateTv = TextView(this)
+            dateTv.textSize = 15f
+            dateTv.setTextColor(Color.argb(225, 255, 255, 255))
+            dateTv.setPadding(dp(4), 0, 0, dp(10))
+            clock.setPadding(dp(2), 0, 0, 0)
+            col.addView(clock)
+            col.addView(dateTv)
+
+            search = EditText(this)
+            search.hint = "Cari aplikasi"
+            search.setHintTextColor(Color.argb(170, 255, 255, 255))
+            search.setTextColor(Color.WHITE)
+            search.textSize = 15f
+            search.setSingleLine(true)
+            search.setPadding(dp(18), 0, dp(18), 0)
+            val sbg = GradientDrawable()
+            sbg.cornerRadius = dp(22).toFloat()
+            sbg.setColor(Color.argb(55, 255, 255, 255))
+            sbg.setStroke(dp(1), Color.argb(80, 255, 255, 255))
+            search.background = sbg
+            search.addTextChangedListener(object : TextWatcher {
+             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {
+             }
+
+             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
+             }
+
+             override fun afterTextChanged(s: Editable?) {
+              applyFilter()
+             }
+            })
+            col.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+            grid = GridView(this)
+            grid.numColumns = 4
+            grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH
+            grid.verticalSpacing = dp(14)
+            grid.isVerticalScrollBarEnabled = false
+            grid.overScrollMode = View.OVER_SCROLL_NEVER
+            grid.setSelector(ColorDrawable(Color.TRANSPARENT))
+            grid.setPadding(0, dp(14), dp(14), dp(10))
+            grid.clipToPadding = false
+            grid.adapter = adapter
+            grid.setOnItemClickListener { _, _, pos, _ ->
+             if (pos >= 0 && pos < shown.size) launch(shown[pos])
+            }
+            grid.setOnItemLongClickListener { _, _, pos, _ ->
+             if (pos >= 0 && pos < shown.size) options(shown[pos])
+             true
+            }
+
+            val gridBox = FrameLayout(this)
+            gridBox.addView(grid, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            val index = LinearLayout(this)
+            index.orientation = LinearLayout.VERTICAL
+            index.gravity = Gravity.CENTER
+            for (ch in letters) {
+             val t = TextView(this)
+             t.text = ch.toString()
+             t.textSize = 9f
+             t.gravity = Gravity.CENTER
+             t.setTextColor(Color.argb(210, 255, 255, 255))
+             index.addView(t, LinearLayout.LayoutParams(dp(14), 0, 1f))
+            }
+            index.setOnTouchListener { v, ev ->
+             if (ev.action == MotionEvent.ACTION_DOWN || ev.action == MotionEvent.ACTION_MOVE) {
+              val h = if (v.height > 0) v.height else 1
+              var k = (ev.y / h * letters.length).toInt()
+              if (k < 0) k = 0
+              if (k >= letters.length) k = letters.length - 1
+              jumpTo(letters[k])
+             }
+             true
+            }
+            val ilp = FrameLayout.LayoutParams(dp(16), ViewGroup.LayoutParams.MATCH_PARENT)
+            ilp.gravity = Gravity.END
+            ilp.topMargin = dp(18)
+            ilp.bottomMargin = dp(12)
+            gridBox.addView(index, ilp)
+            col.addView(gridBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+            dockBox = LinearLayout(this)
+            dockBox.orientation = LinearLayout.HORIZONTAL
+            dockBox.gravity = Gravity.CENTER
+            dockBox.setPadding(dp(10), dp(8), dp(10), dp(8))
+            val dbg = GradientDrawable()
+            dbg.cornerRadius = dp(32).toFloat()
+            dbg.setColor(Color.argb(60, 255, 255, 255))
+            dbg.setStroke(dp(1), Color.argb(90, 255, 255, 255))
+            dockBox.background = dbg
+            val dlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            dlp.topMargin = dp(6)
+            col.addView(dockBox, dlp)
+
+            root.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            root.setOnApplyWindowInsetsListener { _, ins ->
+             col.setPadding(
+              dp(14), ins.systemWindowInsetTop + dp(10),
+              dp(14), ins.systemWindowInsetBottom + dp(14)
+             )
+             ins
+            }
+            setContentView(root)
+           }
+
+           private fun keyOf(label: String): Char {
+            val ch = label.trim().firstOrNull()?.uppercaseChar()
+            return if (ch != null && ch >= 'A' && ch <= 'Z') ch else '#'
+           }
+
+           private fun jumpTo(letter: Char) {
+            var pos = -1
+            for (i in shown.indices) {
+             val k = keyOf(shown[i].label)
+             if (k == letter) {
+              pos = i
+              break
+             }
+             if (pos < 0 && k > letter && letter != '#') {
+              pos = i
+              break
+             }
+            }
+            if (pos >= 0) grid.setSelection(pos)
+           }
+
+           private fun applyFilter() {
+            val q = search.text.toString().trim().lowercase(Locale.getDefault())
+            val out = ArrayList<AppItem>()
+            for (a in all) {
+             if (q.isEmpty() || a.label.lowercase(Locale.getDefault()).contains(q)) out.add(a)
+            }
+            shown = out
+            adapter.notifyDataSetChanged()
+           }
+
+           private fun load() {
+            if (loading) return
+            loading = true
+            val mode = Prefs.iconMode(this)
+            val size = dp(64)
+            Thread {
+             val pm = packageManager
+             val list = ArrayList<AppItem>()
+             val dock = ArrayList<AppItem>()
+             try {
+              val q = Intent(Intent.ACTION_MAIN)
+              q.addCategory(Intent.CATEGORY_LAUNCHER)
+              for (ri in pm.queryIntentActivities(q, 0)) {
+               val ai = ri.activityInfo ?: continue
+               var bmp: Bitmap? = null
+               try {
+                bmp = GlassIcons.render(ri.loadIcon(pm), mode, size)
+               } catch (e: Exception) {
+               }
+               list.add(AppItem(ri.loadLabel(pm).toString(), ComponentName(ai.packageName, ai.name), bmp, null))
+              }
+              list.sortBy { it.label.lowercase(Locale.getDefault()) }
+
+              val specs = ArrayList<Intent>()
+              specs.add(Intent(Intent.ACTION_DIAL))
+              specs.add(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING))
+              specs.add(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER))
+              specs.add(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
+              for (si in specs) {
+               val r = pm.queryIntentActivities(si, 0).firstOrNull() ?: continue
+               val ai = r.activityInfo ?: continue
+               var bmp: Bitmap? = null
+               try {
+                bmp = GlassIcons.render(r.loadIcon(pm), mode, size)
+               } catch (e: Exception) {
+               }
+               dock.add(AppItem(r.loadLabel(pm).toString(), ComponentName(ai.packageName, ai.name), bmp, si.action))
+              }
+             } catch (e: Exception) {
+             }
+             runOnUiThread {
+              all = list
+              loadedMode = mode
+              loading = false
+              applyFilter()
+              fillDock(dock)
+             }
+            }.start()
+           }
+
+           private fun fillDock(items: List<AppItem>) {
+            dockBox.removeAllViews()
+            for (a in items) {
+             val iv = ImageView(this)
+             iv.setImageBitmap(a.icon)
+             iv.setOnClickListener { launch(a) }
+             dockBox.addView(iv, LinearLayout.LayoutParams(0, dp(60), 1f))
+            }
+           }
+
+           private fun launch(a: AppItem) {
+            try {
+             val i = Intent(a.action ?: Intent.ACTION_MAIN)
+             if (a.action == null) i.addCategory(Intent.CATEGORY_LAUNCHER)
+             i.component = a.comp
+             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+             startActivity(i)
+            } catch (e: Exception) {
+             Toast.makeText(this, "Tidak bisa membuka aplikasi ini.", Toast.LENGTH_SHORT).show()
+            }
+           }
+
+           private fun options(a: AppItem) {
+            val names = arrayOf("Info aplikasi", "Copot pemasangan")
+            AlertDialog.Builder(this).setTitle(a.label).setItems(names) { _, which ->
+             try {
+              val uri = Uri.parse("package:" + a.comp.packageName)
+              if (which == 0) {
+               startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+              } else {
+               startActivity(Intent(Intent.ACTION_DELETE, uri))
+              }
+             } catch (e: Exception) {
+             }
+            }.show()
+           }
+
+           private inner class AppAdapter : BaseAdapter() {
+
+            override fun getCount(): Int = shown.size
+
+            override fun getItem(position: Int): Any = shown[position]
+
+            override fun getItemId(position: Int): Long = position.toLong()
+
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+             val cell: LinearLayout
+             val iv: ImageView
+             val tv: TextView
+             if (convertView is LinearLayout) {
+              cell = convertView
+              iv = cell.getChildAt(0) as ImageView
+              tv = cell.getChildAt(1) as TextView
+             } else {
+              cell = LinearLayout(this@LauncherActivity)
+              cell.orientation = LinearLayout.VERTICAL
+              cell.gravity = Gravity.CENTER_HORIZONTAL
+              iv = ImageView(this@LauncherActivity)
+              cell.addView(iv, LinearLayout.LayoutParams(dp(64), dp(64)))
+              tv = TextView(this@LauncherActivity)
+              tv.textSize = 11.5f
+              tv.setTextColor(Color.WHITE)
+              tv.maxLines = 1
+              tv.ellipsize = android.text.TextUtils.TruncateAt.END
+              tv.gravity = Gravity.CENTER
+              tv.setShadowLayer(4f, 0f, 1f, Color.argb(140, 0, 0, 0))
+              val tlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+              tlp.topMargin = dp(2)
+              cell.addView(tv, tlp)
+             }
+             val a = shown[position]
+             iv.setImageBitmap(a.icon)
+             tv.text = a.label
+             return cell
+            }
            }
           }
           CAMES_EOF
