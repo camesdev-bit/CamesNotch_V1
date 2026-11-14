@@ -113,7 +113,8 @@ jobs:
 
               <application
                   android:allowBackup="true"
-                  android:icon="@drawable/ic_launcher"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher"
                   android:label="@string/app_name"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
@@ -190,6 +191,113 @@ jobs:
                   android:fillColor="#5DCAA5"
                   android:pathData="M54,70 m-6,0 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0" />
           </vector>
+          CAMES_EOF
+          cat > 'app/src/main/res/drawable/ic_launcher_bg.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#0B0D17"
+                  android:pathData="M0,0h108v108h-108z" />
+              <path
+                  android:fillColor="#2A3B8F"
+                  android:fillAlpha="0.45"
+                  android:pathData="M0,0h108v50h-108z" />
+              <path
+                  android:fillColor="#FF6A3D"
+                  android:fillAlpha="0.22"
+                  android:pathData="M54,86m-34,0a34,34 0 1,0 68,0a34,34 0 1,0 -68,0" />
+          </vector>
+          CAMES_EOF
+          cat > 'app/src/main/res/drawable/ic_launcher_fg.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#FF9F0A"
+                  android:fillAlpha="0.20"
+                  android:pathData="M54,72m-24,0a24,7 0 1,0 48,0a24,7 0 1,0 -48,0" />
+              <path
+                  android:fillColor="#FF9F0A"
+                  android:pathData="M35,38h38a13,13 0 0 1 13,13a13,13 0 0 1 -13,13h-38a13,13 0 0 1 -13,-13a13,13 0 0 1 13,-13z" />
+              <path
+                  android:fillColor="#000000"
+                  android:pathData="M35,40h38a11,11 0 0 1 11,11a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11a11,11 0 0 1 11,-11z" />
+              <path
+                  android:fillColor="#151A2E"
+                  android:pathData="M72,51m-4.4,0a4.4,4.4 0 1,0 8.8,0a4.4,4.4 0 1,0 -8.8,0" />
+              <path
+                  android:fillColor="#4C6FFF"
+                  android:pathData="M72,51m-1.9,0a1.9,1.9 0 1,0 3.8,0a1.9,1.9 0 1,0 -3.8,0" />
+              <path
+                  android:fillColor="#FF9F0A"
+                  android:pathData="M32,47h3v8h-3z" />
+              <path
+                  android:fillColor="#FF9F0A"
+                  android:pathData="M37.5,44h3v14h-3z" />
+              <path
+                  android:fillColor="#FF9F0A"
+                  android:pathData="M43,48h3v6h-3z" />
+          </vector>
+          CAMES_EOF
+          mkdir -p 'app/src/main/res/mipmap-anydpi-v26'
+          cat > 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml' <<'CAMES_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_bg" />
+              <foreground android:drawable="@drawable/ic_launcher_fg" />
+          </adaptive-icon>
+          CAMES_EOF
+          cat > '/tmp/PhotoIndexStub.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.Manifest
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.graphics.Bitmap
+          import android.graphics.Color
+          import android.os.Build
+
+          object PhotoIndex {
+
+           class Cat(val key: String, val name: String, val color: Int, val words: Set<String>)
+
+           @Volatile
+           var scanning = false
+
+           @Volatile
+           var done = 0
+
+           @Volatile
+           var total = 0
+
+           fun permission(): String {
+            return if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+           }
+
+           fun hasPermission(c: Context): Boolean {
+            return c.checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED
+           }
+
+           fun categories(c: Context): List<Pair<Cat, Int>> = ArrayList()
+
+           fun photosIn(key: String): List<Long> = ArrayList()
+
+           fun catName(key: String): String = key
+
+           fun dateOf(id: Long): String = "Foto"
+
+           fun thumb(c: Context, id: Long, onReady: () -> Unit): Bitmap? = null
+
+           fun scan(c: Context, onProgress: () -> Unit) {
+           }
+          }
           CAMES_EOF
           mkdir -p 'app/src/main/java/id/cames/notch'
           cat > 'app/src/main/java/id/cames/notch/Demo.kt' <<'CAMES_EOF'
@@ -790,6 +898,9 @@ jobs:
             setContentView(sv)
 
             root.addView(label("CamesNotch", 28f, true, dark))
+            root.addView(button("Petunjuk semua fitur") {
+             AlertDialog.Builder(this).setTitle("Petunjuk CamesNotch").setMessage("Gestur utama\n- Ketuk notch: buka aktivitas yang sedang tampil (musik, timer, dll). Kalau kosong, buka info.\n- Geser kiri atau kanan di pil: pindah antar aktivitas.\n- Tarik ke bawah: notch mengikuti jari lalu membuka fitur yang kamu pilih.\n- Tarik ke atas pada panel: menutup panel.\n- Tekan lama kiri, tekan lama kanan, dan geser bawah bisa kamu tukar sendiri di Atur gestur.\n\nFitur\n- Musik, timer, stopwatch, alarm, daya, baterai lemah, bluetooth, mode senyap, telepon.\n- Notifikasi WhatsApp dan aplikasi pilihan.\n- Pengaturan cepat: senter, timer, teks, tangkap layar, kunci, wifi, bluetooth, volume, kecerahan.\n- Teks baca (teleprompter) untuk membaca sambil menatap kamera.\n- Pindai QR dan WiFi lewat kamera.\n- Pencari foto otomatis: kategori dikenali sendiri (pantai, makanan, hewan, dll).\n- Top bar buatan: jam, sinyal, wifi, baterai di bar hitam (opsional).\n\nTips\n- Setelah memasang APK baru, hapus yang lama dulu lalu nyalakan lagi izin Aksesibilitas dan Akses notifikasi.\n- Kalau saklar izin abu-abu: Info aplikasi, titik tiga, Izinkan pengaturan terbatas.\n- Pencari foto butuh izin foto dan pemindaian pertama bisa lama.").setPositiveButton("Tutup", null).show()
+            })
             root.addView(label("Notch ala iPhone untuk Android, tanpa iklan.", 14f, false, grey))
 
             root.addView(label("Coba langsung", 16f, true, dark))
@@ -5340,13 +5451,29 @@ jobs:
 
       - name: Build APK
         run: |
-          for i in 1 2 3 4; do
-            gradle assembleDebug --no-daemon --stacktrace > build.log 2>&1 && ok=1 && break
-            echo "Percobaan $i gagal, ulang 30 dtk"
-            sleep 30
-          done
-          tail -n 60 build.log | grep -E "error:|e: |FAILED|What went wrong|Could not" || true
-          [ "${ok:-0}" = 1 ]
+          build() {
+            for i in 1 2 3; do
+              gradle assembleDebug --no-daemon --console=plain > build.log 2>&1 && return 0
+              echo "=== Percobaan $i gagal ==="
+              grep -E "^e: " build.log | head -40 || true
+              sed -n '/What went wrong/,/\* Try/p' build.log | head -40 || true
+              sleep 20
+            done
+            return 1
+          }
+          if build; then
+            echo "BUILD PENUH BERHASIL"
+          else
+            echo "=== Build penuh gagal. Coba lagi TANPA fitur foto (ML Kit) ==="
+            cp /tmp/PhotoIndexStub.kt app/src/main/java/id/cames/notch/PhotoIndex.kt
+            sed -i '/mlkit/d' app/build.gradle.kts
+            if build; then
+              echo "CATATAN: APK dibuat TANPA fitur foto. Penyebab ada di fitur foto atau ML Kit."
+            else
+              echo "=== Gagal juga tanpa fitur foto. Penyebab di bagian lain, lihat pesan di atas. ==="
+              exit 1
+            fi
+          fi
 
       - name: Siapkan APK
         run: cp app/build/outputs/apk/debug/app-debug.apk CamesNotch.apk
