@@ -93,6 +93,7 @@ jobs:
 
           dependencies {
               implementation("com.google.zxing:core:3.5.3")
+              implementation("com.google.mlkit:image-labeling:17.0.9")
           }
           CAMES_EOF
           mkdir -p 'app/src/main'
@@ -106,6 +107,8 @@ jobs:
               <uses-permission android:name="android.permission.VIBRATE" />
               <uses-permission android:name="android.permission.WRITE_SETTINGS" />
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
 
               <application
@@ -674,6 +677,13 @@ jobs:
             return b
            }
 
+           override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+            if (requestCode == 77 && PhotoIndex.hasPermission(this)) {
+             PhotoIndex.scan(this) {}
+            }
+           }
+
            private fun featureRow(key: String, text: String, def: Boolean): Switch {
             return switchRow(text, Prefs.on(this, key, def)) { checked ->
              Prefs.setOn(this, key, checked)
@@ -911,6 +921,15 @@ jobs:
             root.addView(gestureRow("gd", "Geser bawah"))
             root.addView(featureRow("qr", "Pindai QR dan WiFi di kamera", true))
             root.addView(featureRow("topbar", "Top bar buatan (menutupi bar sistem)", false))
+            root.addView(featureRow("photo", "Pencari foto aktif (atur gesturnya di bawah)", true))
+            root.addView(button("Izinkan akses foto dan pindai galeri") {
+             if (PhotoIndex.hasPermission(this)) {
+              PhotoIndex.scan(this) {}
+              Toast.makeText(this, "Memindai galeri di latar belakang.", Toast.LENGTH_SHORT).show()
+             } else {
+              requestPermissions(arrayOf(PhotoIndex.permission()), 77)
+             }
+            })
 
             root.addView(label("Pengaturan", 16f, true, dark))
             root.addView(switchRow("Notch aktif", Prefs.enabled(this)) { checked ->
@@ -993,6 +1012,7 @@ jobs:
 
            override fun onResume() {
             super.onResume()
+            if (PhotoIndex.hasPermission(this)) PhotoIndex.scan(this) {}
             val l = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: ""
             val a = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
             st1?.text = if (l.contains(packageName)) "Aktif" else "Belum aktif"
@@ -1131,6 +1151,7 @@ jobs:
           import android.bluetooth.BluetoothDevice
           import android.content.BroadcastReceiver
           import android.content.ComponentName
+          import android.content.ContentUris
           import android.content.Context
           import android.content.Intent
           import android.content.IntentFilter
@@ -1157,6 +1178,7 @@ jobs:
           import android.os.SystemClock
           import android.os.VibrationEffect
           import android.os.Vibrator
+          import android.provider.MediaStore
           import android.provider.Settings
           import android.service.notification.NotificationListenerService
           import android.service.notification.StatusBarNotification
@@ -1179,7 +1201,7 @@ jobs:
 
           object NotchController : NotchView.Host {
 
-           private enum class Exp { NONE, MUSIC, ACTS, NOTIFS, QUICK, INFO, TIMER, TEXT }
+           private enum class Exp { NONE, MUSIC, ACTS, NOTIFS, QUICK, INFO, TIMER, TEXT, PHOTOS }
 
            private class CallInfo(
             val name: String,
@@ -1242,6 +1264,7 @@ jobs:
            private var transOpen: PendingIntent? = null
            private var exp = Exp.NONE
            private var actIdx = 0
+           private var photoCat: String? = null
            private var itemList: List<Item> = emptyList()
            private var pendingTap = false
 
@@ -1526,11 +1549,55 @@ jobs:
             if (Prefs.haptic(c)) view?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
            }
 
+           private fun photoRows(): List<Row> {
+            val rows = ArrayList<Row>()
+            val c = a11y ?: return rows
+            if (!PhotoIndex.hasPermission(c)) {
+             rows.add(Row("Izin foto belum diberikan", "Buka CamesNotch lalu ketuk Izinkan akses foto", ORANGE, id = "pnone"))
+             return rows
+            }
+            val again = { h.post { if (exp == Exp.PHOTOS) render() }; Unit }
+            val sel = photoCat
+            if (sel == null) {
+             if (PhotoIndex.scanning) {
+              rows.add(Row("Memindai galeri...", PhotoIndex.done.toString() + " dari " + PhotoIndex.total, ORANGE, id = "pnone"))
+             }
+             for (pr in PhotoIndex.categories(c)) {
+              val first = PhotoIndex.photosIn(pr.first.key).firstOrNull()
+              val bmp = if (first != null) PhotoIndex.thumb(c, first, again) else null
+              rows.add(Row(pr.first.name, pr.second.toString() + " foto", pr.first.color, bmp, "", "pc:" + pr.first.key))
+             }
+             if (rows.isEmpty()) {
+              rows.add(Row("Belum ada foto dikenali", "Tunggu pemindaian selesai", ORANGE, id = "pnone"))
+             }
+            } else {
+             val name = PhotoIndex.catName(sel)
+             rows.add(Row("Kembali", name, Color.WHITE, null, "", "pb"))
+             for (pid in PhotoIndex.photosIn(sel).take(60)) {
+              rows.add(Row(PhotoIndex.dateOf(pid), name, ORANGE, PhotoIndex.thumb(c, pid, again), "", "pp:" + pid))
+             }
+            }
+            return rows
+           }
+
+           private fun openPhoto(pid: Long) {
+            val c = a11y ?: return
+            try {
+             val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, pid)
+             val i = Intent(Intent.ACTION_VIEW)
+             i.setDataAndType(uri, "image/*")
+             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+             c.startActivity(i)
+            } catch (e: Exception) {
+            }
+           }
+
            private fun buildState(): UiState {
             when (exp) {
              Exp.MUSIC -> return musicPanel()
              Exp.ACTS -> return UiState(Kind.PANEL_LIST, rows = acts().map { it.row })
              Exp.NOTIFS -> return UiState(Kind.PANEL_NOTIFS, rows = notifRowsNow())
+             Exp.PHOTOS -> return UiState(Kind.PANEL_NOTIFS, rows = photoRows())
              Exp.QUICK -> return quickPanel()
              Exp.INFO -> return infoPanel()
              Exp.TIMER -> return timerPanel()
@@ -2394,8 +2461,18 @@ jobs:
              if (Prefs.on(c, "left")) setExp(Exp.NOTIFS)
             } else if (f == 1) {
              if (Prefs.on(c, "right")) setExp(Exp.QUICK)
-            } else {
+            } else if (f == 2) {
              if (Prefs.on(c, "text")) setExp(Exp.TEXT)
+            } else {
+             if (Prefs.on(c, "photo")) {
+              photoCat = null
+              setExp(Exp.PHOTOS)
+              PhotoIndex.scan(c) {
+               h.post {
+                if (exp == Exp.PHOTOS) render()
+               }
+              }
+             }
             }
            }
 
@@ -2664,6 +2741,23 @@ jobs:
              return
             } else if (id == "timer" || id == "sw" && exp == Exp.ACTS) {
              setExp(Exp.TIMER)
+             return
+            } else if (id.startsWith("pc:")) {
+             photoCat = id.substring(3)
+             view?.resetScroll()
+             render()
+             return
+            } else if (id == "pb") {
+             photoCat = null
+             view?.resetScroll()
+             render()
+             return
+            } else if (id.startsWith("pp:")) {
+             val pid = id.substring(3).toLongOrNull() ?: -1L
+             if (pid >= 0L) openPhoto(pid)
+             onClose()
+             return
+            } else if (id == "pnone") {
              return
             } else if (id.startsWith("n:")) {
              val idx = id.substring(2).toIntOrNull() ?: -1
@@ -3359,6 +3453,11 @@ jobs:
              a = min(a, g)
             }
             return a
+           }
+
+           fun resetScroll() {
+            scrollY = 0f
+            flingV = 0f
            }
 
            private fun glass(c: Canvas, rad: Float) {
@@ -4479,7 +4578,7 @@ jobs:
             sp(c).edit().putInt("ts", v).apply()
            }
 
-           val GESTURE_NAMES: Array<String> = arrayOf("Daftar notifikasi", "Pengaturan cepat", "Teks baca")
+           val GESTURE_NAMES: Array<String> = arrayOf("Daftar notifikasi", "Pengaturan cepat", "Teks baca", "Pencari foto")
 
            private val GESTURE_SLOTS: Array<String> = arrayOf("gl", "gr", "gd")
 
@@ -4702,6 +4801,388 @@ jobs:
               bx += bwid + gap
              }
             }
+           }
+          }
+          CAMES_EOF
+          cat > 'app/src/main/java/id/cames/notch/PhotoIndex.kt' <<'CAMES_EOF'
+          package id.cames.notch
+
+          import android.Manifest
+          import android.content.ContentUris
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.graphics.Bitmap
+          import android.graphics.BitmapFactory
+          import android.graphics.Color
+          import android.graphics.Matrix
+          import android.media.ExifInterface
+          import android.os.Build
+          import android.os.Process
+          import android.provider.MediaStore
+          import android.util.LruCache
+          import com.google.mlkit.vision.common.InputImage
+          import com.google.mlkit.vision.label.ImageLabeler
+          import com.google.mlkit.vision.label.ImageLabeling
+          import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+          import java.io.File
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+          import java.util.concurrent.CountDownLatch
+          import java.util.concurrent.Executors
+          import java.util.concurrent.TimeUnit
+
+          object PhotoIndex {
+
+           class Cat(val key: String, val name: String, val color: Int, val words: Set<String>)
+
+           private class Entry(val t: Long, val labels: String)
+
+           val cats: List<Cat> = listOf(
+            Cat(
+             "pantai", "Pantai & Laut", Color.rgb(64, 156, 255),
+             setOf("beach", "sea", "ocean", "coast", "shore", "sand", "wave", "seaside", "sandbar", "bay", "surfing", "tide", "swimming")
+            ),
+            Cat(
+             "langit", "Langit & Senja", Color.rgb(255, 149, 0),
+             setOf("sky", "cloud", "sunset", "sunrise", "horizon", "dusk", "dawn", "afterglow", "sun", "moon", "rainbow")
+            ),
+            Cat(
+             "alam", "Alam & Gunung", Color.rgb(52, 199, 89),
+             setOf("mountain", "hill", "forest", "tree", "grass", "lake", "river", "waterfall", "valley", "rock", "cliff", "jungle", "woodland", "meadow", "field", "landscape", "natural", "highland", "wilderness", "vegetation", "snow")
+            ),
+            Cat(
+             "bunga", "Bunga & Tanaman", Color.rgb(255, 105, 180),
+             setOf("flower", "petal", "rose", "plant", "garden", "bouquet", "blossom", "leaf", "flowerpot", "houseplant")
+            ),
+            Cat(
+             "makanan", "Makanan & Minuman", Color.rgb(255, 204, 0),
+             setOf("food", "dish", "meal", "cuisine", "fruit", "dessert", "pizza", "cake", "drink", "coffee", "vegetable", "snack", "bread", "rice", "noodle", "burger", "sushi", "breakfast", "lunch", "dinner", "beverage", "chicken", "tea", "juice", "cookie", "ingredient", "recipe", "baking")
+            ),
+            Cat(
+             "hewan", "Hewan", Color.rgb(175, 130, 90),
+             setOf("cat", "dog", "bird", "pet", "animal", "fish", "horse", "rabbit", "insect", "butterfly", "cow", "goat", "whiskers", "fur", "paw", "snout", "puppy", "kitten", "reptile", "mammal", "wildlife")
+            ),
+            Cat(
+             "orang", "Orang & Selfie", Color.rgb(255, 159, 130),
+             setOf("face", "smile", "selfie", "person", "people", "hair", "skin", "eyebrow", "beard", "glasses", "crowd", "child", "baby", "hand", "finger", "forehead", "cheek", "chin", "nose", "lip", "eye", "head", "neck", "shoulder", "human", "facial", "jaw", "eyelash", "toddler", "hairstyle", "girl", "boy", "man", "woman")
+            ),
+            Cat(
+             "kendaraan", "Kendaraan", Color.rgb(142, 142, 160),
+             setOf("car", "vehicle", "motorcycle", "bicycle", "bus", "truck", "airplane", "aircraft", "boat", "train", "wheel", "tire", "automotive", "motor", "scooter", "taxi", "ship", "bike", "engine", "transport", "watercraft")
+            ),
+            Cat(
+             "bangunan", "Bangunan & Kota", Color.rgb(120, 144, 200),
+             setOf("building", "house", "architecture", "tower", "city", "skyscraper", "bridge", "street", "road", "urban", "church", "mosque", "temple", "roof", "facade", "landmark", "town", "cityscape", "neighbourhood", "metropolis")
+            ),
+            Cat(
+             "seni", "Gambar & Seni", Color.rgb(191, 90, 242),
+             setOf("art", "drawing", "illustration", "cartoon", "anime", "painting", "sketch", "pattern", "graphics", "design", "poster", "comics", "animation", "mural", "fictional", "visual")
+            ),
+            Cat(
+             "layar", "Layar & Dokumen", Color.rgb(100, 210, 255),
+             setOf("text", "document", "paper", "font", "screenshot", "screen", "gadget", "electronic", "device", "display", "technology", "computer", "laptop", "phone", "telephone", "mobile", "multimedia", "software", "website", "number", "handwriting", "receipt", "book", "page", "electronics")
+            ),
+            Cat(
+             "malam", "Malam", Color.rgb(88, 86, 214),
+             setOf("night", "darkness", "midnight", "firework", "neon", "fireworks")
+            ),
+            Cat(
+             "game", "Olahraga & Game", Color.rgb(255, 69, 58),
+             setOf("sports", "sport", "ball", "game", "games", "football", "soccer", "basketball", "badminton", "toy", "playground", "athlete", "stadium", "helmet", "race", "racing")
+            ),
+            Cat(
+             "gaya", "Pakaian & Gaya", Color.rgb(255, 55, 95),
+             setOf("clothing", "fashion", "shoe", "jacket", "dress", "sleeve", "outerwear", "footwear", "jeans", "bag", "hat", "cap", "watch", "jewellery", "sunglasses", "shirt")
+            )
+           )
+
+           private val map = HashMap<Long, Entry>()
+           private var loaded = false
+
+           @Volatile
+           var scanning = false
+
+           @Volatile
+           var done = 0
+
+           @Volatile
+           var total = 0
+
+           private val thumbs = LruCache<Long, Bitmap>(150)
+           private val pending = HashSet<Long>()
+           private val failed = HashSet<Long>()
+           private val pool = Executors.newSingleThreadExecutor()
+           private val dateFmt = SimpleDateFormat("d MMM yyyy", Locale("id", "ID"))
+
+           fun permission(): String {
+            return if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+           }
+
+           fun hasPermission(c: Context): Boolean {
+            return c.checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED
+           }
+
+           private fun load(c: Context) {
+            synchronized(map) {
+             if (loaded) return
+             loaded = true
+             try {
+              val f = File(c.filesDir, "photo_index.txt")
+              if (f.exists()) {
+               for (line in f.readLines()) {
+                val p = line.split("|")
+                if (p.size >= 2) {
+                 val id = p[0].toLongOrNull()
+                 if (id != null) {
+                  val t = p[1].toLongOrNull() ?: 0L
+                  map[id] = Entry(t, if (p.size >= 3) p[2] else "")
+                 }
+                }
+               }
+              }
+             } catch (e: Exception) {
+             }
+            }
+           }
+
+           private fun save(c: Context) {
+            try {
+             val sb = StringBuilder()
+             synchronized(map) {
+              for ((id, e) in map) {
+               sb.append(id).append('|').append(e.t).append('|').append(e.labels).append('\n')
+              }
+             }
+             File(c.filesDir, "photo_index.txt").writeText(sb.toString())
+            } catch (e: Exception) {
+            }
+           }
+
+           private fun catKeys(labels: String): List<String> {
+            val res = ArrayList<String>()
+            if (labels.isEmpty()) return res
+            val words = HashSet<String>()
+            for (l in labels.split(",")) {
+             for (w in l.trim().split(" ")) {
+              words.add(w)
+             }
+            }
+            for (ct in cats) {
+             for (w in words) {
+              if (ct.words.contains(w)) {
+               res.add(ct.key)
+               break
+              }
+             }
+            }
+            return res
+           }
+
+           fun categories(c: Context): List<Pair<Cat, Int>> {
+            load(c)
+            val counts = HashMap<String, Int>()
+            synchronized(map) {
+             for (e in map.values) {
+              for (k in catKeys(e.labels)) {
+               counts[k] = (counts[k] ?: 0) + 1
+              }
+             }
+            }
+            val out = ArrayList<Pair<Cat, Int>>()
+            for (ct in cats) {
+             val n = counts[ct.key] ?: 0
+             if (n > 0) out.add(Pair(ct, n))
+            }
+            out.sortByDescending { it.second }
+            return out
+           }
+
+           fun photosIn(key: String): List<Long> {
+            val out = ArrayList<Long>()
+            synchronized(map) {
+             for ((id, e) in map) {
+              if (catKeys(e.labels).contains(key)) out.add(id)
+             }
+            }
+            out.sortDescending()
+            return out
+           }
+
+           fun catName(key: String): String {
+            for (ct in cats) {
+             if (ct.key == key) return ct.name
+            }
+            return key
+           }
+
+           fun dateOf(id: Long): String {
+            var t = 0L
+            synchronized(map) {
+             val e = map[id]
+             if (e != null) t = e.t
+            }
+            if (t <= 0L) return "Foto"
+            return dateFmt.format(Date(t * 1000L))
+           }
+
+           private fun decode(c: Context, id: Long, maxSide: Int): Bitmap? {
+            try {
+             val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+             val o = BitmapFactory.Options()
+             o.inJustDecodeBounds = true
+             val s1 = c.contentResolver.openInputStream(uri) ?: return null
+             s1.use { BitmapFactory.decodeStream(it, null, o) }
+             var ss = 1
+             val mx = Math.max(o.outWidth, o.outHeight)
+             while (mx / (ss * 2) >= maxSide) ss *= 2
+             val o2 = BitmapFactory.Options()
+             o2.inSampleSize = ss
+             val s2 = c.contentResolver.openInputStream(uri) ?: return null
+             val bmp = s2.use { BitmapFactory.decodeStream(it, null, o2) } ?: return null
+             var rot = 0
+             try {
+              val s3 = c.contentResolver.openInputStream(uri)
+              if (s3 != null) {
+               s3.use {
+                val ex = ExifInterface(it)
+                val ori = ex.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                rot = when (ori) {
+                 ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                 ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                 ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                 else -> 0
+                }
+               }
+              }
+             } catch (e: Exception) {
+             }
+             if (rot != 0) {
+              val m = Matrix()
+              m.postRotate(rot.toFloat())
+              return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+             }
+             return bmp
+            } catch (e: Exception) {
+             return null
+            } catch (e: OutOfMemoryError) {
+             return null
+            }
+           }
+
+           fun thumb(c: Context, id: Long, onReady: () -> Unit): Bitmap? {
+            val b = thumbs.get(id)
+            if (b != null) return b
+            var start = false
+            synchronized(pending) {
+             if (!failed.contains(id) && pending.add(id)) start = true
+            }
+            if (start) {
+             val app = c.applicationContext
+             pool.execute {
+              val bm = decode(app, id, 192)
+              if (bm != null) {
+               val s = Math.min(bm.width, bm.height)
+               val sq = Bitmap.createBitmap(bm, (bm.width - s) / 2, (bm.height - s) / 2, s, s)
+               val out = Bitmap.createScaledBitmap(sq, 96, 96, true)
+               thumbs.put(id, out)
+               synchronized(pending) {
+                pending.remove(id)
+               }
+               onReady()
+              } else {
+               synchronized(pending) {
+                pending.remove(id)
+                failed.add(id)
+               }
+              }
+             }
+            }
+            return null
+           }
+
+           private fun label(l: ImageLabeler, bmp: Bitmap): String {
+            val latch = CountDownLatch(1)
+            var out = ""
+            l.process(InputImage.fromBitmap(bmp, 0))
+             .addOnSuccessListener { list ->
+              val sb = StringBuilder()
+              for (x in list) {
+               if (sb.isNotEmpty()) sb.append(',')
+               sb.append(x.text.lowercase(Locale.US))
+              }
+              out = sb.toString()
+              latch.countDown()
+             }
+             .addOnFailureListener {
+              latch.countDown()
+             }
+            latch.await(8, TimeUnit.SECONDS)
+            return out
+           }
+
+           fun scan(c: Context, onProgress: () -> Unit) {
+            if (scanning) return
+            val app = c.applicationContext
+            if (!hasPermission(app)) return
+            scanning = true
+            Thread {
+             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+             try {
+              load(app)
+              val ids = ArrayList<Long>()
+              val dates = HashMap<Long, Long>()
+              val q = app.contentResolver.query(
+               MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+               arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED),
+               null, null, MediaStore.Images.Media._ID + " DESC"
+              )
+              if (q != null) {
+               q.use { cur ->
+                val ix = cur.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dx = cur.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                while (cur.moveToNext() && ids.size < 4000) {
+                 val id = cur.getLong(ix)
+                 ids.add(id)
+                 dates[id] = cur.getLong(dx)
+                }
+               }
+              }
+              val todo = ArrayList<Long>()
+              synchronized(map) {
+               for (id in ids) {
+                if (!map.containsKey(id)) todo.add(id)
+               }
+              }
+              total = todo.size
+              done = 0
+              onProgress()
+              if (todo.isNotEmpty()) {
+               val labeler = ImageLabeling.getClient(
+                ImageLabelerOptions.Builder().setConfidenceThreshold(0.55f).build()
+               )
+               for (id in todo) {
+                val bmp = decode(app, id, 256)
+                val labs = if (bmp != null) label(labeler, bmp) else ""
+                synchronized(map) {
+                 map[id] = Entry(dates[id] ?: 0L, labs)
+                }
+                done++
+                if (done % 8 == 0) {
+                 save(app)
+                 onProgress()
+                }
+               }
+               labeler.close()
+              }
+              save(app)
+             } catch (e: Exception) {
+             } catch (e: OutOfMemoryError) {
+             } finally {
+              scanning = false
+              onProgress()
+             }
+            }.start()
            }
           }
           CAMES_EOF
